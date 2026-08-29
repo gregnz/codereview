@@ -46,7 +46,9 @@ func main() {
 	// Build workbench.html from template.html
 	templateBytes, err := os.ReadFile("template.html")
 	if err == nil {
+		genesisBytes, _ := os.ReadFile("genesis_story.json")
 		output := strings.ReplaceAll(string(templateBytes), "__TOPOLOGY__", string(topologyJSON))
+		output = strings.ReplaceAll(output, "__GENESIS__", string(genesisBytes))
 		output = strings.ReplaceAll(output, "__SCENARIOS__", string(scenariosJSON))
 
 		dotnetBytes, _ := os.ReadFile("fixtures/dotnet_oracle.json")

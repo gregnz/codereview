@@ -1,0 +1,107 @@
+{
+  "title": "Architectural Genesis of FastMail",
+  "subtitle": "How I Designed and Built this Desktop Email Client From Scratch",
+  "chapters": [
+    {
+      "chapterNumber": 1,
+      "name": "The Problem & Local Storage Foundation",
+      "problemStatement": "Traditional webmail is slow, bloated, and unusable offline. I wanted an instant, keyboard-driven desktop email client that feels as fast as a local code editor. To achieve sub-millisecond search and offline reading, I needed a local-first SQLite database.",
+      "solutionArchitecture": "I started by building `store.go`. I designed a normalized SQLite schema with tables for accounts, threads, messages, and attachments. I also added an FTS5 (Full-Text Search) virtual table so search queries execute in under 2ms without hitting the network.",
+      "activeModuleId": "MOD-STORE",
+      "emergedNodeIds": ["MOD-STORE"],
+      "emergedEdgeIndices": [],
+      "file": "store.go",
+      "line": 45,
+      "authorRationale": [
+        "Why SQLite? Zero setup, embedded, single-file storage in `~/.fastmail/mail.db` with sub-millisecond local reads.",
+        "Why FTS5? Enables instant tokenized full-text search over millions of email body words offline.",
+        "Why Parameterized Queries? Every query uses `?` placeholders to guarantee SQL injection safety."
+      ],
+      "codeSnippetSummary": "Created `LocalStore` struct and `NewLocalStore(dbPath)` with SQLite schema migrations."
+    },
+    {
+      "chapterNumber": 2,
+      "name": "Connecting to the Outside World: OAuth2",
+      "problemStatement": "Now that I have local storage, I need to connect to real email providers (Gmail). Storing raw passwords in plaintext is insecure and violates OAuth standards. I needed a secure token handshake.",
+      "solutionArchitecture": "I built `auth.go` with an `AuthService` struct. It implements Google's OAuth2 authorization code flow with offline access tokens and refresh tokens. When logging in, it spawns a temporary local loopback HTTP server to capture the redirect code, then encrypts and persists credentials in `~/.fastmail/tokens.json`.",
+      "activeModuleId": "MOD-AUTH",
+      "emergedNodeIds": ["MOD-STORE", "MOD-AUTH"],
+      "emergedEdgeIndices": [],
+      "file": "auth.go",
+      "line": 35,
+      "authorRationale": [
+        "Why local redirect server? Opens the user's default browser for Google sign-in and captures the OAuth callback on `localhost:8085` automatically.",
+        "Why refresh tokens? Access tokens expire after 60 minutes; refresh tokens allow silent background renewals without prompting the user."
+      ],
+      "codeSnippetSummary": "Created `AuthService` with `GetClient(account)` and browser OAuth authorization loops."
+    },
+    {
+      "chapterNumber": 3,
+      "name": "The Background Sync Engine & Concurrency",
+      "problemStatement": "Fetching thousands of emails and attachments over network APIs takes time. If I run this synchronously on the main thread, the desktop UI will freeze. I needed high-concurrency background workers without crashing the app.",
+      "solutionArchitecture": "I created `sync.go` with a dedicated `SyncEngine`. It uses background Goroutines to asynchronously poll Gmail API history deltas. To coordinate multi-account syncing safely, I added two distinct mutexes: `syncMu` (to prevent duplicate parallel sync jobs on the same account) and `mu` (to protect shared account state).",
+      "activeModuleId": "MOD-SYNC",
+      "emergedNodeIds": ["MOD-STORE", "MOD-AUTH", "MOD-SYNC"],
+      "emergedEdgeIndices": [0],
+      "file": "sync.go",
+      "line": 40,
+      "authorRationale": [
+        "Why Goroutines? Go's lightweight green threads allow parallel mailbox syncing across multiple accounts with tiny memory footprint.",
+        "Why `syncMu` vs `mu`? `syncMu` protects long-running background sync operations, while `mu` is a quick RWMutex for reading active account state without contention.",
+        "Why Delta Tokens? Uses Gmail's `historyId` to fetch only new changes rather than re-downloading entire inboxes."
+      ],
+      "codeSnippetSummary": "Created `SyncEngine` with goroutine worker loops and delta synchronization."
+    },
+    {
+      "chapterNumber": 4,
+      "name": "Email Ingestion Security & Tracker Blocking",
+      "problemStatement": "Emails from the internet are untrusted. Marketing emails contain invisible 1x1 tracking pixels (SendGrid, HubSpot, Mailchimp) that spy on when you open them, plus potentially malicious HTML scripts. I needed a privacy firewall.",
+      "solutionArchitecture": "Before writing raw email bodies into SQLite, I pass them through `sanitizer.go` and `classifier.go`. `SanitizeEmailHTML` strips tracking images, removes dangerous script tags, and normalizes spacer bloat. `classifier.go` inspects headers to categorize emails into 'Main', 'Newsletters', and 'Updates'.",
+      "activeModuleId": "MOD-SANITIZER",
+      "emergedNodeIds": ["MOD-STORE", "MOD-AUTH", "MOD-SYNC", "MOD-SANITIZER"],
+      "emergedEdgeIndices": [0, 1],
+      "file": "sanitizer.go",
+      "line": 42,
+      "authorRationale": [
+        "Why strip tracking pixels? Protects user IP and read receipts from senders.",
+        "Why auto-classification? Keeps personal conversations focused in 'Main' while newsletters and receipts are neatly split.",
+        "Design Note: While I started with regex-based stripping, upgrading to tokenized DOM parsing (`bluemonday`) will make it 100% immune to nested HTML mutations."
+      ],
+      "codeSnippetSummary": "Created `SanitizeEmailHTML` tracker filter and `ClassifyMessage` split inbox rule engine."
+    },
+    {
+      "chapterNumber": 5,
+      "name": "Desktop Orchestration & Wails IPC Bridge",
+      "problemStatement": "I have the storage, auth, sync, and security layers. Now I need a central coordinator that binds all these Go services to native macOS/Windows window chrome and exposes a clean API to the web frontend.",
+      "solutionArchitecture": "I created `app.go` and `main.go` using Wails v2. The `App` struct holds references to `LocalStore`, `AuthService`, and `SyncEngine`. Wails automatically generates TypeScript bindings for any exported method on `App`, and allows Go to emit reactive events (`wailsRuntime.EventsEmit`) directly to the frontend.",
+      "activeModuleId": "MOD-APP",
+      "emergedNodeIds": ["MOD-STORE", "MOD-AUTH", "MOD-SYNC", "MOD-SANITIZER", "MOD-APP"],
+      "emergedEdgeIndices": [0, 1, 2, 3],
+      "file": "app.go",
+      "line": 35,
+      "authorRationale": [
+        "Why Wails over Electron? Wails uses the OS's native WebKit/WebView2, resulting in a 15MB binary instead of 200MB, with 10x lower RAM usage.",
+        "Why Typed IPC? Wails auto-generates TypeScript interfaces for all Go structs, eliminating runtime frontend/backend type mismatches.",
+        "Why Event Emitter? Background sync progress is pushed to the UI via `wailsRuntime.EventsEmit('sync:progress')`."
+      ],
+      "codeSnippetSummary": "Created `App` struct orchestrator and registered Wails IPC bindings in `main.go`."
+    },
+    {
+      "chapterNumber": 6,
+      "name": "The Reactive Svelte 5 User Experience",
+      "problemStatement": "The backend is complete. The final step is building a modern, keyboard-driven UI with instant responsiveness, split inboxes, dark mode, and seamless message reading.",
+      "solutionArchitecture": "I built the frontend in `frontend/src/App.svelte` using Svelte 5. It features a Superhuman-style 3-pane layout: Folders on the left, Thread List in the middle, and Message Reader on the right. Keyboard shortcuts (`j`/`k` for navigation, `e` for archive, `s` for star) allow navigating your entire inbox without touching the mouse.",
+      "activeModuleId": "MOD-FRONTEND",
+      "emergedNodeIds": ["MOD-STORE", "MOD-AUTH", "MOD-SYNC", "MOD-SANITIZER", "MOD-APP", "MOD-FRONTEND"],
+      "emergedEdgeIndices": [0, 1, 2, 3, 4, 5],
+      "file": "frontend/src/App.svelte",
+      "line": 45,
+      "authorRationale": [
+        "Why Svelte? Zero virtual-DOM overhead, true reactivity, and instant DOM updates when emails sync in.",
+        "Why Keyboard First? Power users spend 80% less time processing emails when all actions have single-key bindings.",
+        "Why Split Inbox? Separates urgent emails from bulk newsletters without complex manual folder rules."
+      ],
+      "codeSnippetSummary": "Created reactive Svelte 3-pane desktop layout with keyboard shortcut bindings."
+    }
+  ]
+}

@@ -30,10 +30,10 @@
 - [ ] **UI-02**: Synchronized split-pane source code viewer with line highlights and hazard badges linked to selected graph nodes.
 - [ ] **UI-03**: Executive mental model summary ("How This App Works") and automated invariant scorecard with severity breakdown.
 
-### 6. Universal Cognitive Schema & Polyglot Adapters (UCS)
-- [ ] **UCS-01**: Formally define the language-agnostic Universal Cognitive Schema (`schema/universal-ir.json`) and TypeScript definitions covering Modules, Concurrency, Taint, Bridge, and Invariants.
-- [ ] **UCS-02**: Establish CLI adapter interface protocol for polyglot analyzers (e.g. Roslyn `.NET`, Java AST, Python AST).
-- [ ] **UCS-03**: Provide validated polyglot reference fixtures (.NET + Oracle, Java + PostgreSQL, Python + SQLite) ready for workbench exploration.
+### 7. Architectural Genesis & Code Emergence (GEN)
+- [ ] **GEN-01**: Implement structured 6-chapter Genesis narrative modeling the step-by-step creation of the app from zero ("I started at A, then to solve X I added B").
+- [ ] **GEN-02**: Implement dynamic node emergence on the graph canvas (nodes appear, connect, and illuminate as the story progresses).
+- [ ] **GEN-03**: Create synchronized Code Emergence viewer displaying design decisions, struct evolutions, and authorship rationale.
 
 ## v2 Requirements
 - **V2-01**: Live runtime dynamic instrumentation via custom Go dlv / eBPF probe agent.
@@ -44,7 +44,7 @@
 | Feature | Reason |
 |---------|--------|
 | Cloud SaaS hosting | Local developer workbench ensures zero latency, privacy, and instant offline operation |
-| Automated code modification without review | Goal is deep human comprehension and verification, not opaque AI auto-patching |
+| Heavy linter / error-centric dashboard as default | Primary focus is pure developer understanding and mental model mastery |
 
 ## Traceability
 
@@ -68,6 +68,9 @@
 | UCS-01 | Phase 6 | Complete |
 | UCS-02 | Phase 6 | Complete |
 | UCS-03 | Phase 6 | Complete |
+| GEN-01 | Phase 7 | Complete |
+| GEN-02 | Phase 7 | Complete |
+| GEN-03 | Phase 7 | Complete |
 
 **Coverage:**
 - v1 requirements: 18 total
