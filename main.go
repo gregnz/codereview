@@ -48,6 +48,15 @@ func main() {
 	if err == nil {
 		output := strings.ReplaceAll(string(templateBytes), "__TOPOLOGY__", string(topologyJSON))
 		output = strings.ReplaceAll(output, "__SCENARIOS__", string(scenariosJSON))
+
+		dotnetBytes, _ := os.ReadFile("fixtures/dotnet_oracle.json")
+		javaBytes, _ := os.ReadFile("fixtures/java_postgres.json")
+		pythonBytes, _ := os.ReadFile("fixtures/python_sqlite.json")
+
+		output = strings.ReplaceAll(output, "__DOTNET__", string(dotnetBytes))
+		output = strings.ReplaceAll(output, "__JAVA__", string(javaBytes))
+		output = strings.ReplaceAll(output, "__PYTHON__", string(pythonBytes))
+
 		_ = os.WriteFile("workbench.html", []byte(output), 0644)
 		_ = os.WriteFile("index.html", []byte(output), 0644)
 	}

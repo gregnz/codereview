@@ -30,9 +30,14 @@
 - [ ] **UI-02**: Synchronized split-pane source code viewer with line highlights and hazard badges linked to selected graph nodes.
 - [ ] **UI-03**: Executive mental model summary ("How This App Works") and automated invariant scorecard with severity breakdown.
 
+### 6. Universal Cognitive Schema & Polyglot Adapters (UCS)
+- [ ] **UCS-01**: Formally define the language-agnostic Universal Cognitive Schema (`schema/universal-ir.json`) and TypeScript definitions covering Modules, Concurrency, Taint, Bridge, and Invariants.
+- [ ] **UCS-02**: Establish CLI adapter interface protocol for polyglot analyzers (e.g. Roslyn `.NET`, Java AST, Python AST).
+- [ ] **UCS-03**: Provide validated polyglot reference fixtures (.NET + Oracle, Java + PostgreSQL, Python + SQLite) ready for workbench exploration.
+
 ## v2 Requirements
 - **V2-01**: Live runtime dynamic instrumentation via custom Go dlv / eBPF probe agent.
-- **V2-02**: Multi-language support (Python / Rust / Java) beyond Go + Svelte.
+- **V2-02**: Multi-language IDE extension (VS Code / JetBrains plugin).
 - **V2-03**: Automated test case generation for newly discovered invariant gaps.
 
 ## Out of Scope
@@ -45,25 +50,28 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TOPO-01 | Phase 1 | Pending |
-| TOPO-02 | Phase 1 | Pending |
-| TOPO-03 | Phase 1 | Pending |
-| CONC-01 | Phase 2 | Pending |
-| CONC-02 | Phase 2 | Pending |
-| CONC-03 | Phase 2 | Pending |
-| SEC-01 | Phase 3 | Pending |
-| SEC-02 | Phase 3 | Pending |
-| SEC-03 | Phase 3 | Pending |
-| SCEN-01 | Phase 4 | Pending |
-| SCEN-02 | Phase 4 | Pending |
-| SCEN-03 | Phase 4 | Pending |
-| UI-01 | Phase 5 | Pending |
-| UI-02 | Phase 5 | Pending |
-| UI-03 | Phase 5 | Pending |
+| TOPO-01 | Phase 1 | Complete |
+| TOPO-02 | Phase 1 | Complete |
+| TOPO-03 | Phase 1 | Complete |
+| CONC-01 | Phase 2 | Complete |
+| CONC-02 | Phase 2 | Complete |
+| CONC-03 | Phase 2 | Complete |
+| SEC-01 | Phase 3 | Complete |
+| SEC-02 | Phase 3 | Complete |
+| SEC-03 | Phase 3 | Complete |
+| SCEN-01 | Phase 4 | Complete |
+| SCEN-02 | Phase 4 | Complete |
+| SCEN-03 | Phase 4 | Complete |
+| UI-01 | Phase 5 | Complete |
+| UI-02 | Phase 5 | Complete |
+| UI-03 | Phase 5 | Complete |
+| UCS-01 | Phase 6 | Complete |
+| UCS-02 | Phase 6 | Complete |
+| UCS-03 | Phase 6 | Complete |
 
 **Coverage:**
-- v1 requirements: 15 total
-- Mapped to phases: 15
+- v1 requirements: 18 total
+- Mapped to phases: 18
 - Unmapped: 0 ✓
 
 ---

@@ -11,8 +11,36 @@ Building a standalone, high-performance visual verification and mental model wor
 - [ ] **Phase 3: Security, Dataflow & Sanitizer Invariant Engine** - Trace untrusted email dataflows, audit regex sanitization bypasses, and check SQL parameterization.
 - [ ] **Phase 4: Scenario-Driven Verification & Simulation Engine** - Create step-by-step execution traces, state mutations, and invariant verification harnesses for core workflows.
 - [ ] **Phase 5: Interactive Visual Workbench UI** - Deliver a state-of-the-art interactive web workbench with zoomable topology graph, multi-lens filtering, scenario stepper, and synchronized code viewer.
+- [ ] **Phase 6: Universal Cognitive Schema (IR) & Polyglot Adapter Framework** - Formalize the language-agnostic Intermediate Representation and adapter interface for polyglot ecosystems (.NET, Java, Python, React).
 
 ## Phase Details
+
+### Phase 6: Universal Cognitive Schema (IR) & Polyglot Adapter Framework
+**Goal**: Formalize the Universal Cognitive Schema (IR) specification (JSON schema & TypeScript contracts) and adapter abstraction so any backend (.NET/Oracle, Java/PostgreSQL, Python/SQLite) or frontend (React, Vue, Svelte) can be visually verified by the workbench.
+**Depends on**: Phase 5
+**Requirements**: UCS-01, UCS-02, UCS-03
+**Success Criteria**:
+  1. Complete formal JSON schema definition for Universal Codebase IR (`schema/universal-ir.json` and TypeScript types).
+  2. Standard CLI adapter protocol allowing external language analyzers (`dotnet-analyzer`, `py-analyzer`, `java-analyzer`) to feed `topology.json` into the workbench.
+  3. Polyglot validation fixtures for .NET+Oracle, Java+PostgreSQL, and Python+SQLite demonstrating full visual rendering and scenario stepping without workbench changes.
+**Plans**: 1 plan
+
+Plans:
+- [ ] 06-01: Implement Universal Cognitive Schema Specification, Adapter Protocol, and Polyglot Fixtures.
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. AST & Bridge Extraction | 1/1 | Complete | 2026-08-30 |
+| 2. Concurrency Auditor | 1/1 | Complete | 2026-08-30 |
+| 3. Security & Sanitizer Invariant | 1/1 | Complete | 2026-08-30 |
+| 4. Scenario Simulation Engine | 1/1 | Complete | 2026-08-30 |
+| 5. Interactive Visual Workbench | 1/1 | Complete | 2026-08-30 |
+| 6. Universal Cognitive Schema (IR) | 1/1 | Complete | 2026-08-30 |
 
 ### Phase 1: Codebase AST & Full-Stack Bridge Extraction Engine
 **Goal**: Build the core static analysis engine that reads all Go source files and Svelte/Wails bindings in `~/projects/mail`, extracting complete symbol topologies, struct members, method signatures, goroutine spawn points, and IPC connections.

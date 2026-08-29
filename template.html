@@ -486,16 +486,23 @@
   </style>
 </head>
 <body>
-
   <!-- Top Navigation -->
   <header class="top-nav">
     <div class="brand">
       <div class="brand-icon">AG</div>
       <div>
         <div class="brand-title">Codebase Mental Model & Verification Workbench</div>
-        <div style="font-size: 11px; color: var(--text-dim);">Target: ~/projects/mail (Go + Wails + Svelte)</div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+          <span style="font-size: 11px; color: var(--text-dim);">Active Project:</span>
+          <select id="project-switcher" style="background: rgba(8,11,18,0.9); border: 1px solid var(--border-subtle); color: var(--cyan); font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 2px 6px; border-radius: 4px; outline: none; cursor: pointer;">
+            <option value="go">⚡ FastMail (Go + Wails + Svelte)</option>
+            <option value="dotnet">🔷 Enterprise Billing (.NET 8 + Oracle + React)</option>
+            <option value="java">☕ Inventory Service (Java Spring + PostgreSQL)</option>
+            <option value="python">🐍 Task Queue (Python FastAPI + SQLite)</option>
+          </select>
+        </div>
       </div>
-      <span class="brand-badge">AST + CONCURRENCY VERIFIED</span>
+      <span class="brand-badge" id="project-runtime-badge">GO + WAILS</span>
     </div>
 
     <!-- Lens Selector -->
@@ -602,12 +609,20 @@
   </div>
 
   <script>
-    // Embedded Data Models
-    const TOPOLOGY = __TOPOLOGY__;
-    const SCENARIOS = __SCENARIOS__;
+    // Polyglot Embedded Data Models
+    const ALL_PROJECTS = {
+      go: { topology: __TOPOLOGY__, scenarios: __SCENARIOS__ },
+      dotnet: { topology: __DOTNET__, scenarios: { scenarios: [] } },
+      java: { topology: __JAVA__, scenarios: { scenarios: [] } },
+      python: { topology: __PYTHON__, scenarios: { scenarios: [] } }
+    };
+
+    let currentProjectKey = "go";
+    let TOPOLOGY = ALL_PROJECTS.go.topology;
+    let SCENARIOS = ALL_PROJECTS.go.scenarios;
 
     let currentLens = "all";
-    let activeScenario = SCENARIOS.scenarios[0];
+    let activeScenario = SCENARIOS.scenarios[0] || null;
     let currentStepIdx = 0;
     let isPlaying = false;
     let playInterval = null;
@@ -616,24 +631,74 @@
     let svgPanX = 50;
     let svgPanY = 40;
 
-    // Node Positions Layout
-    const MODULE_COORDS = {
-      "MOD-FRONTEND": { x: 120, y: 180, label: "🎨 Svelte 5 Frontend", color: "#3b82f6" },
-      "MOD-APP":      { x: 380, y: 180, label: "🚀 App IPC Controller (Go)", color: "#00f0ff" },
-      "MOD-AUTH":     { x: 380, y: 380, label: "🔑 OAuth2 Auth Service", color: "#a855f7" },
-      "MOD-SYNC":     { x: 650, y: 180, label: "🔄 Sync Engine (Goroutines)", color: "#f59e0b" },
-      "MOD-SANITIZER":{ x: 650, y: 380, label: "🛡️ HTML Sanitizer (Regex)", color: "#f43f5e" },
-      "MOD-STORE":    { x: 920, y: 280, label: "💾 SQLite Store (FTS5)", color: "#10b981" }
-    };
+    function switchProject(key) {
+      if (!ALL_PROJECTS[key]) return;
+      currentProjectKey = key;
+      TOPOLOGY = ALL_PROJECTS[key].topology;
+      SCENARIOS = ALL_PROJECTS[key].scenarios;
+      
+      const badge = document.getElementById("project-runtime-badge");
+      badge.textContent = (TOPOLOGY.runtime || key).toUpperCase() + " IR VERIFIED";
 
-    const EDGES = [
-      { from: "MOD-FRONTEND", to: "MOD-APP", label: "Wails IPC (SyncMailbox)", type: "bridge" },
-      { from: "MOD-APP", to: "MOD-AUTH", label: "GetToken()", type: "call" },
-      { from: "MOD-APP", to: "MOD-SYNC", label: "go SyncMailbox()", type: "concurrency" },
-      { from: "MOD-SYNC", to: "MOD-SANITIZER", label: "SanitizeEmailHTML()", type: "security" },
-      { from: "MOD-SANITIZER", to: "MOD-STORE", label: "InsertMessage()", type: "storage" },
-      { from: "MOD-APP", to: "MOD-STORE", label: "GetThreads()", type: "storage" }
-    ];
+      const hazardBtn = document.getElementById("btn-hazards-modal");
+      const hazardCount = (TOPOLOGY.concurrencyReport && TOPOLOGY.concurrencyReport.hazards) ? TOPOLOGY.concurrencyReport.hazards.length : 0;
+      hazardBtn.textContent = `🚨 ${hazardCount} Critical Hazards`;
+
+      renderSidebarModules();
+      renderScenarioSelect();
+      renderGraph();
+
+      if (SCENARIOS.scenarios && SCENARIOS.scenarios.length > 0) {
+        loadScenario(0);
+      } else {
+        document.getElementById("scenario-step-title").textContent = "Scenario Engine Ready";
+        document.getElementById("scenario-step-desc").textContent = `Architecture, invariants, and hazards loaded for ${TOPOLOGY.projectName}.`;
+        if (TOPOLOGY.modules && TOPOLOGY.modules.length > 0) {
+          showCodeForModule(TOPOLOGY.modules[0]);
+        }
+      }
+    }
+
+    function getModuleCoordsAndEdges() {
+      const coords = {};
+      const edges = [];
+      const colors = ["#3b82f6", "#00f0ff", "#a855f7", "#f59e0b", "#f43f5e", "#10b981"];
+
+      if (TOPOLOGY.modules) {
+        TOPOLOGY.modules.forEach((mod, idx) => {
+          let x = 120 + (idx % 3) * 320;
+          let y = 180 + Math.floor(idx / 3) * 200;
+          
+          if (mod.type.includes("frontend") || mod.type.includes("ui")) {
+            x = 140; y = 200;
+          } else if (mod.type.includes("storage") || mod.type.includes("database")) {
+            x = 860; y = 200 + (idx % 2) * 160;
+          } else if (mod.type.includes("security") || mod.type.includes("auth")) {
+            x = 500; y = 360;
+          } else {
+            x = 500; y = 180;
+          }
+
+          coords[mod.id] = {
+            x: x,
+            y: y,
+            label: mod.name,
+            color: colors[idx % colors.length]
+          };
+        });
+
+        // Add auto edges between consecutive modules or based on bridge/storage
+        for (let i = 0; i < TOPOLOGY.modules.length - 1; i++) {
+          edges.push({
+            from: TOPOLOGY.modules[i].id,
+            to: TOPOLOGY.modules[i+1].id,
+            label: "Calls / Dispatches",
+            type: "call"
+          });
+        }
+      }
+      return { coords, edges };
+    }
 
     // Initialize UI
     function init() {
@@ -769,11 +834,12 @@
 
       const edgesGroup = document.getElementById("edges-group");
       const nodesGroup = document.getElementById("nodes-group");
+      const { coords, edges } = getModuleCoordsAndEdges();
 
       // Draw Edges
-      EDGES.forEach(edge => {
-        const fromCoord = MODULE_COORDS[edge.from];
-        const toCoord = MODULE_COORDS[edge.to];
+      edges.forEach(edge => {
+        const fromCoord = coords[edge.from];
+        const toCoord = coords[edge.to];
         if (!fromCoord || !toCoord) return;
 
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -793,8 +859,8 @@
       });
 
       // Draw Nodes
-      Object.keys(MODULE_COORDS).forEach(modId => {
-        const coord = MODULE_COORDS[modId];
+      Object.keys(coords).forEach(modId => {
+        const coord = coords[modId];
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         g.setAttribute("transform", `translate(${coord.x}, ${coord.y})`);
         g.style.cursor = "pointer";
@@ -843,7 +909,7 @@
       const badge = document.getElementById("code-line-badge");
       const viewer = document.getElementById("code-content");
 
-      const rawContent = TOPOLOGY.sourceFiles[fileName] || "// Source file: " + fileName;
+      const rawContent = (TOPOLOGY.sourceFiles && TOPOLOGY.sourceFiles[fileName]) || "// Source file: " + fileName;
       title.textContent = fileName;
       badge.textContent = `Line ${targetLine}`;
 

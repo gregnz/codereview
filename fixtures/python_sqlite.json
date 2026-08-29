@@ -1,0 +1,117 @@
+{
+  "projectName": "FastAPI Task Processor (Python 3.12 + SQLite WAL)",
+  "targetPath": "/Users/gregday/projects/task-queue",
+  "runtime": "python",
+  "modules": [
+    {
+      "id": "MOD-FASTAPI-APP",
+      "name": "FastAPI Async Web Service",
+      "type": "backend_service",
+      "description": "High-throughput asynchronous job ingestion REST API with background task scheduling.",
+      "files": ["main.py", "tasks.py"],
+      "role": "API Gateway",
+      "riskScore": "HIGH"
+    },
+    {
+      "id": "MOD-SQLITE-STORAGE",
+      "name": "SQLite WAL Engine & Database Layer",
+      "type": "storage",
+      "description": "Embedded SQLite database with Write-Ahead Logging for task state tracking.",
+      "files": ["db.py", "models.py"],
+      "role": "Data Persistence",
+      "riskScore": "MEDIUM"
+    }
+  ],
+  "structs": [
+    {
+      "id": "CLASS-TaskManager",
+      "name": "TaskManager",
+      "file": "tasks.py",
+      "line": 12,
+      "fields": [
+        { "name": "lock", "type": "asyncio.Lock", "isMutex": true, "isMap": false, "isChannel": false, "isPointer": false },
+        { "name": "active_tasks", "type": "dict[str, Task]", "isMutex": false, "isMap": true, "isChannel": false, "isPointer": false }
+      ],
+      "hasMutex": true,
+      "mutexType": "asyncio.Lock",
+      "methods": ["enqueue_task", "process_queue"],
+      "doc": "Manages asynchronous worker queue"
+    }
+  ],
+  "functions": [
+    {
+      "id": "FUNC-submit_job",
+      "name": "submit_job",
+      "receiver": "FastAPI",
+      "file": "main.py",
+      "startLine": 20,
+      "endLine": 38,
+      "signature": "async def submit_job(job: JobRequest)",
+      "calls": ["db.insert_job_sync", "task_manager.enqueue_task"],
+      "doc": "HTTP endpoint ingesting jobs"
+    }
+  ],
+  "concurrencyReport": {
+    "totalMutexes": 1,
+    "totalGoroutines": 4,
+    "hazards": [
+      {
+        "id": "HAZ-PYTHON-EVENTLOOP-BLOCK",
+        "severity": "CRITICAL",
+        "title": "Synchronous Blocking SQLite Call in Async Event Loop",
+        "file": "main.py",
+        "line": 28,
+        "description": "Calling synchronous `sqlite3.connect().execute()` inside `async def submit_job` blocks the entire asyncio event loop, causing request starvation (0 TPS throughput) under concurrency.",
+        "remedy": "Use `aiosqlite` or offload blocking database operations via `await asyncio.to_thread(db.insert_job, job)`.",
+        "category": "CONCURRENCY"
+      },
+      {
+        "id": "HAZ-SQLITE-THREAD-SAFETY",
+        "severity": "WARNING",
+        "title": "sqlite3.Connection Shared Across Threadpool Workers",
+        "file": "db.py",
+        "line": 15,
+        "description": "SQLite connection instantiated without `check_same_thread=False` or separate per-thread instances. Triggers `sqlite3.ProgrammingError` when accessed by concurrent threads.",
+        "remedy": "Instantiate connections per thread or utilize an async connection pool.",
+        "category": "DATA_INTEGRITY"
+      }
+    ],
+    "idiomExplainers": [
+      {
+        "concept": "Asyncio Event Loop Non-Blocking Rule in Python",
+        "summary": "Python's asyncio runs on a single operating system thread per process. Any synchronous I/O or sleep blocks all other concurrent requests.",
+        "whyItMatters": "A 50ms synchronous SQLite write will delay 50 other pending API requests by 50ms each.",
+        "goRule": "Never call synchronous disk or network I/O inside `async def` without `asyncio.to_thread()`.",
+        "codeExample": "import asyncio\nimport aiosqlite\n\nasync def async_insert(job):\n    async with aiosqlite.connect('tasks.db') as db:\n        await db.execute('INSERT INTO jobs (id) VALUES (?)', (job.id,))\n        await db.commit()"
+      }
+    ]
+  },
+  "securityReport": {
+    "taintFlows": [],
+    "sanitizerAudits": [],
+    "sqlChecks": [
+      {
+        "file": "db.py",
+        "line": 34,
+        "querySnippet": "INSERT INTO jobs (id, payload) VALUES (?, ?)",
+        "isParameterized": true
+      }
+    ]
+  },
+  "bridgeEndpoints": [],
+  "invariants": [
+    {
+      "id": "INV-PY-01",
+      "category": "CONCURRENCY",
+      "invariant": "All database operations inside async routes must be non-blocking",
+      "status": "FAILED",
+      "file": "main.py",
+      "line": 28,
+      "explanation": "Synchronous sqlite3 call found in async route handler."
+    }
+  ],
+  "sourceFiles": {
+    "main.py": "from fastapi import FastAPI\nimport sqlite3\n\napp = FastAPI()\n\n@app.post(\"/jobs\")\nasync def submit_job(job_id: str, payload: str):\n    # BUG: Synchronous blocking call inside async def\n    conn = sqlite3.connect(\"tasks.db\")\n    conn.execute(\"INSERT INTO jobs VALUES (?, ?)\", (job_id, payload))\n    conn.commit()\n    return {\"status\": \"QUEUED\"}"
+  },
+  "summary": "FastAPI Task Ingestion API with embedded SQLite storage. AST inspection surfaced 1 critical event-loop blocking hazard and verified parameterization of insert queries."
+}

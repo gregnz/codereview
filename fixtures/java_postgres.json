@@ -1,0 +1,117 @@
+{
+  "projectName": "E-Commerce Inventory (Spring Boot 3 + PostgreSQL)",
+  "targetPath": "/Users/gregday/projects/inventory-service",
+  "runtime": "java",
+  "modules": [
+    {
+      "id": "MOD-SPRING-ORDER",
+      "name": "Spring Boot Order Service",
+      "type": "backend_service",
+      "description": "Handles shopping cart checkouts, inventory stock locks, and PostgreSQL transactional boundaries.",
+      "files": ["OrderService.java", "OrderController.java"],
+      "role": "Transaction Coordinator",
+      "riskScore": "HIGH"
+    },
+    {
+      "id": "MOD-POSTGRES-JPA",
+      "name": "PostgreSQL HikariCP & Hibernate JPA",
+      "type": "storage",
+      "description": "PostgreSQL 16 persistence layer with HikariCP connection pooling, MVCC row-level locking, and JSONB document stores.",
+      "files": ["InventoryRepository.java", "ProductEntity.java"],
+      "role": "Data Persistence",
+      "riskScore": "MEDIUM"
+    }
+  ],
+  "structs": [
+    {
+      "id": "CLASS-OrderService",
+      "name": "OrderService",
+      "file": "OrderService.java",
+      "line": 18,
+      "fields": [
+        { "name": "inventoryRepo", "type": "InventoryRepository", "isMutex": false, "isMap": false, "isChannel": false, "isPointer": true },
+        { "name": "orderLock", "type": "ReentrantLock", "isMutex": true, "isMap": false, "isChannel": false, "isPointer": true }
+      ],
+      "hasMutex": true,
+      "mutexType": "ReentrantLock",
+      "methods": ["checkoutOrder", "reserveStock"],
+      "doc": "Service orchestrating order placements and stock reservations"
+    }
+  ],
+  "functions": [
+    {
+      "id": "FUNC-checkoutOrder",
+      "name": "checkoutOrder",
+      "receiver": "OrderService",
+      "file": "OrderService.java",
+      "startLine": 32,
+      "endLine": 60,
+      "signature": "public OrderResponse checkoutOrder(OrderRequest request)",
+      "calls": ["this.reserveStock", "inventoryRepo.save"],
+      "doc": "Places order and deducts stock under @Transactional"
+    }
+  ],
+  "concurrencyReport": {
+    "totalMutexes": 1,
+    "totalGoroutines": 12,
+    "hazards": [
+      {
+        "id": "HAZ-SPRING-TRANSACTION-BYPASS",
+        "severity": "CRITICAL",
+        "title": "Spring @Transactional Self-Invocation Proxy Bypass",
+        "file": "OrderService.java",
+        "line": 42,
+        "description": "Calling `this.reserveStock()` internally bypasses the Spring CGLIB/JDK proxy. `@Transactional(propagation = Propagation.REQUIRES_NEW)` is silently ignored, risking partial inventory deductions on crash.",
+        "remedy": "Inject self (`@Lazy OrderService self`) or extract stock reservation into a separate Spring bean.",
+        "category": "CONCURRENCY"
+      },
+      {
+        "id": "HAZ-HIBERNATE-N-PLUS-ONE",
+        "severity": "WARNING",
+        "title": "Hibernate N+1 Query Cascade on Products List",
+        "file": "InventoryRepository.java",
+        "line": 78,
+        "description": "Fetching 100 orders triggers 101 separate SELECT queries to PostgreSQL for item rows due to FetchType.LAZY in loop.",
+        "remedy": "Use `@EntityGraph(attributePaths = {\"items\"})` or `JOIN FETCH o.items`.",
+        "category": "PERFORMANCE"
+      }
+    ],
+    "idiomExplainers": [
+      {
+        "concept": "Spring AOP Proxy Interception & @Transactional",
+        "summary": "Spring applies transactional boundaries by wrapping beans in dynamic proxies. Direct intra-class method calls (`this.method()`) skip the proxy.",
+        "whyItMatters": "Nested transactions or rollbacks defined on internal helper methods will fail to trigger.",
+        "goRule": "Always invoke transactional methods through injected Spring beans, never `this.`.",
+        "codeExample": "@Service\npublic class OrderService {\n    @Transactional\n    public void placeOrder(OrderRequest req) {\n        // Delegated to separate bean to ensure proxy executes\n        inventoryService.reserve(req.getItems());\n    }\n}"
+      }
+    ]
+  },
+  "securityReport": {
+    "taintFlows": [],
+    "sanitizerAudits": [],
+    "sqlChecks": [
+      {
+        "file": "InventoryRepository.java",
+        "line": 50,
+        "querySnippet": "SELECT p FROM ProductEntity p WHERE p.sku = :sku",
+        "isParameterized": true
+      }
+    ]
+  },
+  "bridgeEndpoints": [],
+  "invariants": [
+    {
+      "id": "INV-SPRING-01",
+      "category": "CONCURRENCY",
+      "invariant": "@Transactional methods must not be called via this. reference",
+      "status": "FAILED",
+      "file": "OrderService.java",
+      "line": 42,
+      "explanation": "Direct self-invocation of reserveStock() bypasses transactional interceptor."
+    }
+  ],
+  "sourceFiles": {
+    "OrderService.java": "package com.enterprise.inventory.service;\n\n@Service\npublic class OrderService {\n    private final InventoryRepository inventoryRepo;\n\n    public OrderService(InventoryRepository inventoryRepo) {\n        this.inventoryRepo = inventoryRepo;\n    }\n\n    @Transactional\n    public OrderResponse checkoutOrder(OrderRequest request) {\n        // BUG: Self-invocation skips REQUIRES_NEW proxy\n        this.reserveStock(request.getItemId(), request.getQuantity());\n        return new OrderResponse(\"SUCCESS\");\n    }\n\n    @Transactional(propagation = Propagation.REQUIRES_NEW)\n    public void reserveStock(Long itemId, int qty) {\n        inventoryRepo.decrementStock(itemId, qty);\n    }\n}"
+  },
+  "summary": "E-Commerce Inventory & Order Placement Service built with Spring Boot 3 and PostgreSQL 16. Static analysis identified 1 critical Spring AOP @Transactional proxy bypass hazard and 1 N+1 Hibernate query bottleneck."
+}

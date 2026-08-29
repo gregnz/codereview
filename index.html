@@ -486,16 +486,23 @@
   </style>
 </head>
 <body>
-
   <!-- Top Navigation -->
   <header class="top-nav">
     <div class="brand">
       <div class="brand-icon">AG</div>
       <div>
         <div class="brand-title">Codebase Mental Model & Verification Workbench</div>
-        <div style="font-size: 11px; color: var(--text-dim);">Target: ~/projects/mail (Go + Wails + Svelte)</div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+          <span style="font-size: 11px; color: var(--text-dim);">Active Project:</span>
+          <select id="project-switcher" style="background: rgba(8,11,18,0.9); border: 1px solid var(--border-subtle); color: var(--cyan); font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 2px 6px; border-radius: 4px; outline: none; cursor: pointer;">
+            <option value="go">⚡ FastMail (Go + Wails + Svelte)</option>
+            <option value="dotnet">🔷 Enterprise Billing (.NET 8 + Oracle + React)</option>
+            <option value="java">☕ Inventory Service (Java Spring + PostgreSQL)</option>
+            <option value="python">🐍 Task Queue (Python FastAPI + SQLite)</option>
+          </select>
+        </div>
       </div>
-      <span class="brand-badge">AST + CONCURRENCY VERIFIED</span>
+      <span class="brand-badge" id="project-runtime-badge">GO + WAILS</span>
     </div>
 
     <!-- Lens Selector -->
@@ -602,8 +609,9 @@
   </div>
 
   <script>
-    // Embedded Data Models
-    const TOPOLOGY = {
+    // Polyglot Embedded Data Models
+    const ALL_PROJECTS = {
+      go: { topology: {
   "projectName": "FastMail (Wails + Go + Svelte)",
   "targetPath": "/Users/gregday/projects/mail",
   "modules": [
@@ -4579,8 +4587,7 @@
     "sync.go": "package main\n\nimport (\n\t\"context\"\n\t\"encoding/base64\"\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"strings\"\n\t\"sync\"\n\t\"time\"\n\n\t\"google.golang.org/api/gmail/v1\"\n)\n\ntype SyncEngine struct {\n\tsrv   *gmail.Service\n\tstore *LocalStore\n}\n\nfunc NewSyncEngine(srv *gmail.Service, store *LocalStore) *SyncEngine {\n\treturn \u0026SyncEngine{srv: srv, store: store}\n}\n\nfunc (s *SyncEngine) SetService(srv *gmail.Service) {\n\ts.srv = srv\n}\n\n// SyncAllInbox fetches ALL inbox threads across all pages for a specific account\nfunc (s *SyncEngine) SyncAllInbox(\n\tctx context.Context,\n\taccountEmail string,\n\tlogger func(level, msg string),\n\tonProgress func(fetched, total, remaining int),\n) error {\n\tif s.srv == nil {\n\t\treturn fmt.Errorf(\"gmail service is not initialized\")\n\t}\n\n\tif logger != nil {\n\t\tlogger(\"INFO\", fmt.Sprintf(\"[%s] Querying Gmail label statistics for INBOX...\", accountEmail))\n\t}\n\n\ttotalThreads := 0\n\tinboxLabel, err := s.srv.Users.Labels.Get(\"me\", \"INBOX\").Context(ctx).Do()\n\tif err == nil \u0026\u0026 inboxLabel != nil {\n\t\ttotalThreads = int(inboxLabel.ThreadsTotal)\n\t\tif logger != nil {\n\t\t\tlogger(\"INFO\", fmt.Sprintf(\"[%s] Gmail reports %d total threads (%d unread) in INBOX\", accountEmail, inboxLabel.ThreadsTotal, inboxLabel.ThreadsUnread))\n\t\t}\n\t} else if logger != nil {\n\t\tlogger(\"WARN\", fmt.Sprintf(\"[%s] Could not fetch label stats: %v\", accountEmail, err))\n\t}\n\n\tpageToken, _ := s.store.GetBackfillPageToken(accountEmail)\n\tif pageToken != \"\" \u0026\u0026 logger != nil {\n\t\tlogger(\"INFO\", fmt.Sprintf(\"[%s] Resuming historical sync from saved pageToken: %s...\", accountEmail, pageToken[:min(len(pageToken), 12)]))\n\t}\n\n\ttotalFetched := 0\n\tbatchNum := 0\n\tworkers := 12\n\n\tfor {\n\t\tbatchNum++\n\t\tif logger != nil {\n\t\t\tlogger(\"INFO\", fmt.Sprintf(\"[%s] Fetching thread batch #%d from Gmail API...\", accountEmail, batchNum))\n\t\t}\n\n\t\tcall := s.srv.Users.Threads.List(\"me\").LabelIds(\"INBOX\").MaxResults(100)\n\t\tif pageToken != \"\" {\n\t\t\tcall = call.PageToken(pageToken)\n\t\t}\n\n\t\tstartTime := time.Now()\n\t\tresp, err := call.Context(ctx).Do()\n\t\tif err != nil {\n\t\t\tif logger != nil {\n\t\t\t\tlogger(\"ERROR\", fmt.Sprintf(\"[%s] Failed to list threads on page %d: %v\", accountEmail, batchNum, err))\n\t\t\t}\n\t\t\treturn fmt.Errorf(\"failed to list threads: %w\", err)\n\t\t}\n\n\t\tif totalThreads == 0 \u0026\u0026 resp.ResultSizeEstimate \u003e 0 {\n\t\t\ttotalThreads = int(resp.ResultSizeEstimate)\n\t\t}\n\n\t\tif len(resp.Threads) == 0 {\n\t\t\tif logger != nil {\n\t\t\t\tlogger(\"INFO\", fmt.Sprintf(\"[%s] Sync reached the end of mailbox.\", accountEmail))\n\t\t\t}\n\t\t\t_ = s.store.SetBackfillPageToken(accountEmail, \"\")\n\t\t\tbreak\n\t\t}\n\n\t\t// Extract thread IDs from list response\n\t\tvar pageThreadIDs []string\n\t\tfor _, t := range resp.Threads {\n\t\t\tpageThreadIDs = append(pageThreadIDs, t.Id)\n\t\t}\n\n\t\t// Fast local filter: only fetch details for thread IDs NOT already cached\n\t\tmissingIDs, err := s.store.FilterMissingThreadIDs(pageThreadIDs)\n\t\tif err != nil {\n\t\t\tmissingIDs = pageThreadIDs\n\t\t}\n\n\t\tskippedCount := len(pageThreadIDs) - len(missingIDs)\n\t\tif logger != nil {\n\t\t\tif skippedCount \u003e 0 {\n\t\t\t\tlogger(\"INFO\", fmt.Sprintf(\"[%s] Batch #%d: %d thread IDs already cached in SQLite (skipped %d API calls), fetching %d new threads...\", accountEmail, batchNum, skippedCount, skippedCount, len(missingIDs)))\n\t\t\t} else {\n\t\t\t\tlogger(\"INFO\", fmt.Sprintf(\"[%s] Received %d thread IDs in %v. Spawning parallel workers...\", accountEmail, len(resp.Threads), time.Since(startTime).Round(time.Millisecond)))\n\t\t\t}\n\t\t}\n\n\t\tvar batchRecords []EmailThread\n\t\tif len(missingIDs) \u003e 0 {\n\t\t\tthreadChan := make(chan string, len(missingIDs))\n\t\t\tfor _, id := range missingIDs {\n\t\t\t\tthreadChan \u003c- id\n\t\t\t}\n\t\t\tclose(threadChan)\n\n\t\t\tvar mu sync.Mutex\n\t\t\tvar wg sync.WaitGroup\n\t\t\tnumWorkers := workers\n\t\t\tif len(missingIDs) \u003c numWorkers {\n\t\t\t\tnumWorkers = len(missingIDs)\n\t\t\t}\n\t\t\tfor i := 0; i \u003c numWorkers; i++ {\n\t\t\t\twg.Add(1)\n\t\t\t\tgo func() {\n\t\t\t\t\tdefer wg.Done()\n\t\t\t\t\tfor threadID := range threadChan {\n\t\t\t\t\t\trecord := s.fetchThreadSummary(ctx, threadID, accountEmail)\n\t\t\t\t\t\tif record != nil {\n\t\t\t\t\t\t\tmu.Lock()\n\t\t\t\t\t\t\tbatchRecords = append(batchRecords, *record)\n\t\t\t\t\t\t\tmu.Unlock()\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}()\n\t\t\t}\n\t\t\twg.Wait()\n\n\t\t\t// Fast single-transaction write into SQLite\n\t\t\t_ = s.store.BatchUpsertThreads(batchRecords)\n\t\t}\n\n\t\t// Checkpoint the newest historyId on Batch 1 if not set yet\n\t\tif pageToken == \"\" \u0026\u0026 len(batchRecords) \u003e 0 {\n\t\t\t_ = s.store.SetLastHistoryID(accountEmail, batchRecords[0].HistoryID)\n\t\t\tif logger != nil {\n\t\t\t\tlogger(\"INFO\", fmt.Sprintf(\"[%s] Checkpointed latest historyId=%s into SQLite sync_state\", accountEmail, batchRecords[0].HistoryID))\n\t\t\t}\n\t\t}\n\n\t\ttotalFetched += len(resp.Threads)\n\t\tremaining := totalThreads - totalFetched\n\t\tif remaining \u003c 0 {\n\t\t\tremaining = 0\n\t\t}\n\n\t\t// Save current page token progress to SQLite\n\t\tif resp.NextPageToken != \"\" {\n\t\t\t_ = s.store.SetBackfillPageToken(accountEmail, resp.NextPageToken)\n\t\t} else {\n\t\t\t_ = s.store.SetBackfillPageToken(accountEmail, \"\")\n\t\t}\n\n\t\tif logger != nil {\n\t\t\tlogger(\"INFO\", fmt.Sprintf(\"[%s] Batch #%d complete (%d downloaded, %d skipped). Total processed: %d / %d\", accountEmail, batchNum, len(batchRecords), skippedCount, totalFetched, totalThreads))\n\t\t}\n\n\t\tif onProgress != nil {\n\t\t\tonProgress(totalFetched, totalThreads, remaining)\n\t\t}\n\n\t\tif resp.NextPageToken == \"\" {\n\t\t\tif logger != nil {\n\t\t\t\tlogger(\"INFO\", fmt.Sprintf(\"[%s] Full historical sync complete! All pages retrieved.\", accountEmail))\n\t\t\t}\n\t\t\tbreak\n\t\t}\n\t\tpageToken = resp.NextPageToken\n\t}\n\n\treturn nil\n}\n\n// DeltaSync checks for updates since startHistoryID in sub-50ms\nfunc (s *SyncEngine) DeltaSync(\n\tctx context.Context,\n\taccountEmail string,\n\tstartHistoryID string,\n\tlogger func(level, msg string),\n) (int, error) {\n\tif s.srv == nil {\n\t\treturn 0, fmt.Errorf(\"gmail service is not initialized\")\n\t}\n\n\tvar histID uint64\n\t_, err := fmt.Sscanf(startHistoryID, \"%d\", \u0026histID)\n\tif err != nil || histID == 0 {\n\t\treturn 0, fmt.Errorf(\"invalid history id: %s\", startHistoryID)\n\t}\n\n\tif logger != nil {\n\t\tlogger(\"INFO\", fmt.Sprintf(\"[%s] Performing incremental delta sync from historyId=%d...\", accountEmail, histID))\n\t}\n\n\tstartTime := time.Now()\n\tcall := s.srv.Users.History.List(\"me\").\n\t\tStartHistoryId(histID).\n\t\tHistoryTypes(\"messageAdded\", \"labelAdded\", \"labelRemoved\")\n\n\tresp, err := call.Context(ctx).Do()\n\tif err != nil {\n\t\treturn 0, err\n\t}\n\n\tupdatedThreadIDs := make(map[string]bool)\n\tfor _, h := range resp.History {\n\t\tfor _, added := range h.MessagesAdded {\n\t\t\tif added.Message != nil \u0026\u0026 added.Message.ThreadId != \"\" {\n\t\t\t\tupdatedThreadIDs[added.Message.ThreadId] = true\n\t\t\t}\n\t\t}\n\t\tfor _, lbl := range h.LabelsAdded {\n\t\t\tif lbl.Message != nil \u0026\u0026 lbl.Message.ThreadId != \"\" {\n\t\t\t\tupdatedThreadIDs[lbl.Message.ThreadId] = true\n\t\t\t}\n\t\t}\n\t\tfor _, lbl := range h.LabelsRemoved {\n\t\t\tif lbl.Message != nil \u0026\u0026 lbl.Message.ThreadId != \"\" {\n\t\t\t\tupdatedThreadIDs[lbl.Message.ThreadId] = true\n\t\t\t}\n\t\t}\n\t}\n\n\tif len(updatedThreadIDs) \u003e 0 {\n\t\tvar batchRecords []EmailThread\n\t\tfor tid := range updatedThreadIDs {\n\t\t\trecord := s.fetchThreadSummary(ctx, tid, accountEmail)\n\t\t\tif record != nil {\n\t\t\t\tbatchRecords = append(batchRecords, *record)\n\t\t\t}\n\t\t}\n\t\t_ = s.store.BatchUpsertThreads(batchRecords)\n\t}\n\n\t// Update local sync state with the newest historyId\n\tif resp.HistoryId \u003e 0 {\n\t\t_ = s.store.SetLastHistoryID(accountEmail, fmt.Sprintf(\"%d\", resp.HistoryId))\n\t}\n\n\tif logger != nil {\n\t\tlogger(\"INFO\", fmt.Sprintf(\"[%s] Delta sync completed in %v. %d thread changes synced.\", accountEmail, time.Since(startTime).Round(time.Millisecond), len(updatedThreadIDs)))\n\t}\n\n\treturn len(updatedThreadIDs), nil\n}\n\nfunc (s *SyncEngine) fetchThreadSummary(ctx context.Context, threadID, accountEmail string) *EmailThread {\n\treq := s.srv.Users.Threads.Get(\"me\", threadID).\n\t\tFormat(\"metadata\").\n\t\tMetadataHeaders(\"Subject\", \"From\", \"Date\")\n\n\tthread, err := req.Context(ctx).Do()\n\tif err != nil || len(thread.Messages) == 0 {\n\t\treturn nil\n\t}\n\n\tfirstMsg := thread.Messages[0]\n\tvar subject, sender string\n\n\tif firstMsg.Payload != nil {\n\t\tfor _, header := range firstMsg.Payload.Headers {\n\t\t\tswitch header.Name {\n\t\t\tcase \"Subject\":\n\t\t\t\tsubject = header.Value\n\t\t\tcase \"From\":\n\t\t\t\tsender = header.Value\n\t\t\t}\n\t\t}\n\t}\n\n\tif subject == \"\" {\n\t\tsubject = \"(No Subject)\"\n\t}\n\tif sender == \"\" {\n\t\tsender = \"Unknown Sender\"\n\t}\n\n\tcat := ClassifyThread(firstMsg.LabelIds, sender, subject, thread.Snippet)\n\n\treturn \u0026EmailThread{\n\t\tID:            thread.Id,\n\t\tAccountEmail:  accountEmail,\n\t\tHistoryID:     fmt.Sprintf(\"%d\", thread.HistoryId),\n\t\tSnippet:       thread.Snippet,\n\t\tSubject:       subject,\n\t\tFrom:          sender,\n\t\tInternalDate:  firstMsg.InternalDate,\n\t\tLabelIDs:      strings.Join(firstMsg.LabelIds, \",\"),\n\t\tSplitCategory: cat,\n\t}\n}\n\nfunc (s *SyncEngine) FetchFullThread(ctx context.Context, threadID, accountEmail string) ([]EmailMessage, error) {\n\tif s.srv == nil {\n\t\treturn nil, fmt.Errorf(\"gmail service is not initialized\")\n\t}\n\n\tcached, err := s.store.GetMessagesForThread(threadID)\n\tif err == nil \u0026\u0026 len(cached) \u003e 0 {\n\t\tfor i := range cached {\n\t\t\tif cached[i].BodyHTML != \"\" {\n\t\t\t\tres := SanitizeEmailHTML(cached[i].BodyHTML)\n\t\t\t\tcached[i].BodyHTML = res.CleanHTML\n\t\t\t\tcached[i].TrackersBlocked = res.TrackersBlocked\n\t\t\t}\n\t\t}\n\t\treturn cached, nil\n\t}\n\n\tfullThread, err := s.srv.Users.Threads.Get(\"me\", threadID).Format(\"full\").Context(ctx).Do()\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"failed to fetch thread details: %w\", err)\n\t}\n\n\tvar messages []EmailMessage\n\n\tfor _, msg := range fullThread.Messages {\n\t\tvar subject, sender, recipient string\n\t\tif msg.Payload != nil {\n\t\t\tfor _, h := range msg.Payload.Headers {\n\t\t\t\tswitch h.Name {\n\t\t\t\tcase \"Subject\":\n\t\t\t\t\tsubject = h.Value\n\t\t\t\tcase \"From\":\n\t\t\t\t\tsender = h.Value\n\t\t\t\tcase \"To\":\n\t\t\t\t\trecipient = h.Value\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\n\t\trawHTML, plainText, attachments := extractMessageContent(msg.Id, msg.Payload)\n\t\tsanitized := SanitizeEmailHTML(rawHTML)\n\n\t\temailMsg := EmailMessage{\n\t\t\tID:              msg.Id,\n\t\t\tAccountEmail:    accountEmail,\n\t\t\tThreadID:        threadID,\n\t\t\tFrom:            sender,\n\t\t\tTo:              recipient,\n\t\t\tDate:            msg.InternalDate,\n\t\t\tSubject:         subject,\n\t\t\tSnippet:         msg.Snippet,\n\t\t\tBodyHTML:        sanitized.CleanHTML,\n\t\t\tBodyText:        plainText,\n\t\t\tTrackersBlocked: sanitized.TrackersBlocked,\n\t\t\tAttachments:     attachments,\n\t\t}\n\n\t\t_ = s.store.UpsertMessage(emailMsg)\n\t\tfor _, att := range attachments {\n\t\t\t_ = s.store.UpsertAttachment(att)\n\t\t}\n\n\t\tmessages = append(messages, emailMsg)\n\t}\n\n\treturn messages, nil\n}\n\nfunc (s *SyncEngine) DownloadAttachment(ctx context.Context, msgID, attachmentID, filename, threadID string) (string, error) {\n\tif s.srv == nil {\n\t\treturn \"\", fmt.Errorf(\"gmail service is not initialized\")\n\t}\n\n\thome, _ := os.UserHomeDir()\n\ttargetDir := filepath.Join(home, \".fastmail\", \"attachments\", threadID)\n\t_ = os.MkdirAll(targetDir, 0755)\n\ttargetPath := filepath.Join(targetDir, filename)\n\n\tif _, err := os.Stat(targetPath); err == nil {\n\t\treturn targetPath, nil\n\t}\n\n\tatt, err := s.srv.Users.Messages.Attachments.Get(\"me\", msgID, attachmentID).Context(ctx).Do()\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"failed to download attachment: %w\", err)\n\t}\n\n\tdata, err := base64.URLEncoding.DecodeString(att.Data)\n\tif err != nil {\n\t\tdata, err = base64.StdEncoding.DecodeString(att.Data)\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"failed to decode attachment data: %w\", err)\n\t\t}\n\t}\n\n\tif err := os.WriteFile(targetPath, data, 0644); err != nil {\n\t\treturn \"\", fmt.Errorf(\"failed to write attachment to disk: %w\", err)\n\t}\n\n\treturn targetPath, nil\n}\n\nfunc extractMessageContent(msgID string, part *gmail.MessagePart) (htmlBody, textBody string, attachments []EmailAttachment) {\n\tif part == nil {\n\t\treturn \"\", \"\", nil\n\t}\n\n\tif part.Filename != \"\" \u0026\u0026 part.Body != nil \u0026\u0026 part.Body.AttachmentId != \"\" {\n\t\tvar contentID string\n\t\tfor _, h := range part.Headers {\n\t\t\tif h.Name == \"Content-ID\" {\n\t\t\t\tcontentID = strings.Trim(h.Value, \"\u003c\u003e\")\n\t\t\t}\n\t\t}\n\n\t\tatt := EmailAttachment{\n\t\t\tID:           fmt.Sprintf(\"%s_%s\", msgID, part.Body.AttachmentId),\n\t\t\tMessageID:    msgID,\n\t\t\tFilename:     part.Filename,\n\t\t\tMimeType:     part.MimeType,\n\t\t\tSize:         part.Body.Size,\n\t\t\tAttachmentID: part.Body.AttachmentId,\n\t\t\tContentID:    contentID,\n\t\t}\n\t\tattachments = append(attachments, att)\n\t}\n\n\tif part.Body != nil \u0026\u0026 part.Body.Data != \"\" {\n\t\tdecoded, err := base64.URLEncoding.DecodeString(part.Body.Data)\n\t\tif err == nil {\n\t\t\tif part.MimeType == \"text/html\" {\n\t\t\t\thtmlBody = string(decoded)\n\t\t\t} else if part.MimeType == \"text/plain\" {\n\t\t\t\ttextBody = string(decoded)\n\t\t\t}\n\t\t}\n\t}\n\n\tfor _, child := range part.Parts {\n\t\tchildHTML, childText, childAtts := extractMessageContent(msgID, child)\n\t\tif childHTML != \"\" \u0026\u0026 htmlBody == \"\" {\n\t\t\thtmlBody = childHTML\n\t\t}\n\t\tif childText != \"\" \u0026\u0026 textBody == \"\" {\n\t\t\ttextBody = childText\n\t\t}\n\t\tattachments = append(attachments, childAtts...)\n\t}\n\n\treturn htmlBody, textBody, attachments\n}\n"
   },
   "summary": "FastMail is a modern Wails v2 desktop email client built with a Go backend and Svelte frontend. It features multi-account Gmail sync, embedded SQLite with FTS5 search, HTML tracker blocking, and split inbox categorizations. Static analysis identified 2 critical concurrency hazards (concurrent map access in sync routines) and 1 critical security vulnerability (regex-based HTML sanitization bypasses)."
-};
-    const SCENARIOS = {
+}, scenarios: {
   "scenarios": [
     {
       "id": "SCEN-SYNC",
@@ -4838,10 +4845,419 @@
       ]
     }
   ]
-};
+} },
+      dotnet: { topology: {
+  "projectName": "Enterprise Billing (.NET 8 + Oracle DB + React)",
+  "targetPath": "/Users/gregday/projects/billing-service",
+  "runtime": "dotnet",
+  "modules": [
+    {
+      "id": "MOD-DOTNET-API",
+      "name": "ASP.NET Core Billing API",
+      "type": "backend_service",
+      "description": "REST API controller handling high-throughput customer subscription billing, invoice generation, and credit card processing.",
+      "files": ["BillingController.cs", "PaymentService.cs"],
+      "role": "API Gateway & Orchestrator",
+      "riskScore": "HIGH"
+    },
+    {
+      "id": "MOD-ORACLE-DAL",
+      "name": "Oracle Data Access Layer (ODP.NET)",
+      "type": "storage",
+      "description": "Manages OracleConnection connection pooling, PL/SQL package executions, and financial ledger transaction boundaries.",
+      "files": ["OracleLedgerRepository.cs", "OracleContext.cs"],
+      "role": "Data Persistence",
+      "riskScore": "HIGH"
+    },
+    {
+      "id": "MOD-REACT-FE",
+      "name": "React 19 Executive Dashboard",
+      "type": "frontend_ui",
+      "description": "Financial analytics portal with real-time billing metrics, invoice ledger inspection, and customer management.",
+      "files": ["BillingDashboard.tsx", "useBillingApi.ts"],
+      "role": "User Interface",
+      "riskScore": "LOW"
+    }
+  ],
+  "structs": [
+    {
+      "id": "CLASS-BillingController",
+      "name": "BillingController",
+      "file": "BillingController.cs",
+      "line": 24,
+      "fields": [
+        { "name": "_paymentService", "type": "IPaymentService", "isMutex": false, "isMap": false, "isChannel": false, "isPointer": true },
+        { "name": "_semaphore", "type": "SemaphoreSlim", "isMutex": true, "isMap": false, "isChannel": false, "isPointer": true }
+      ],
+      "hasMutex": true,
+      "mutexType": "SemaphoreSlim",
+      "methods": ["ProcessBillingBatch", "GetInvoiceDetails"],
+      "doc": "Controller handling batch invoice settlements"
+    }
+  ],
+  "functions": [
+    {
+      "id": "FUNC-ProcessBillingBatch",
+      "name": "ProcessBillingBatch",
+      "receiver": "BillingController",
+      "file": "BillingController.cs",
+      "startLine": 45,
+      "endLine": 78,
+      "signature": "public async Task<IActionResult> ProcessBillingBatch([FromBody] BillingBatchRequest request)",
+      "calls": ["_semaphore.WaitAsync", "_paymentService.ExecuteBillingAsync", "_semaphore.Release"],
+      "doc": "Executes batch settlement with concurrency throttling"
+    }
+  ],
+  "concurrencyReport": {
+    "totalMutexes": 2,
+    "totalGoroutines": 8,
+    "hazards": [
+      {
+        "id": "HAZ-DOTNET-SYNC-OVER-ASYNC",
+        "severity": "CRITICAL",
+        "title": "Sync-Over-Async Task Deadlock (.Result in ASP.NET)",
+        "file": "PaymentService.cs",
+        "line": 62,
+        "description": "Calling `_oracleRepo.GetCustomerAsync(id).Result` on ASP.NET request thread causes thread-pool starvation and deadlock under load.",
+        "remedy": "Always `await` async tasks or use `ConfigureAwait(false)` in library code.",
+        "category": "CONCURRENCY"
+      },
+      {
+        "id": "HAZ-ORACLE-CURSOR-LEAK",
+        "severity": "CRITICAL",
+        "title": "Un-disposed OracleDataReader / CLOB Cursor Leak",
+        "file": "OracleLedgerRepository.cs",
+        "line": 104,
+        "description": "OracleDataReader not enclosed in `await using` block. Exceeds Oracle OPEN_CURSORS limit (ORA-01000) under sustained load.",
+        "remedy": "Enclose all OracleCommand and OracleDataReader instances in `await using` statements.",
+        "category": "DATA_INTEGRITY"
+      }
+    ],
+    "idiomExplainers": [
+      {
+        "concept": ".NET Task Synchronization & Async/Await Lifetime",
+        "summary": "ASP.NET Core runs request pipelines asynchronously. Blocking synchronous calls on Tasks (`.Result` / `.Wait()`) hijack thread-pool workers.",
+        "whyItMatters": "Under 500 concurrent requests, thread pool exhaustion leads to 504 Gateway Timeouts.",
+        "goRule": "Always use `await` end-to-end; avoid `.GetAwaiter().GetResult()` in controllers.",
+        "codeExample": "public async Task<InvoiceDto> GetInvoiceAsync(long id)\n{\n    await using var conn = new OracleConnection(_connStr);\n    await conn.OpenAsync();\n    return await conn.QuerySingleAsync<InvoiceDto>(sql, new { id });\n}"
+      }
+    ]
+  },
+  "securityReport": {
+    "taintFlows": [
+      {
+        "id": "TAINT-DOTNET-01",
+        "source": "HTTP POST /api/billing/batch (BillingBatchRequest.Notes)",
+        "sanitizer": "Ganss.XSS.HtmlSanitizer",
+        "sink": "Oracle DB CLOB Column (INVOICE_NOTES)",
+        "description": "Customer invoice notes sanitized for HTML injection before writing to Oracle CLOB.",
+        "isSanitized": true,
+        "steps": [
+          "BillingController.cs:48 -> Request payload received",
+          "PaymentService.cs:55 -> HtmlSanitizer.Sanitize(request.Notes)",
+          "OracleLedgerRepository.cs:112 -> OracleCommand with :notes parameter"
+        ]
+      }
+    ],
+    "sanitizerAudits": [
+      {
+        "methodName": "HtmlSanitizer.Sanitize",
+        "file": "PaymentService.cs",
+        "approach": "HTML_SANITIZER",
+        "riskLevel": "LOW",
+        "bypassRisks": [],
+        "recommendation": "Ganss.XSS.HtmlSanitizer uses tokenized DOM parsing, safe from mXSS."
+      }
+    ],
+    "sqlChecks": [
+      {
+        "file": "OracleLedgerRepository.cs",
+        "line": 88,
+        "querySnippet": "SELECT * FROM INVOICES WHERE CUSTOMER_ID = :cust_id",
+        "isParameterized": true
+      }
+    ]
+  },
+  "bridgeEndpoints": [
+    {
+      "goMethod": "POST /api/billing/batch",
+      "goFile": "BillingController.cs",
+      "tsBinding": "apiClient.processBatch(request)",
+      "svelteCallers": ["BillingDashboard.tsx", "BatchPaymentModal.tsx"],
+      "eventType": "REST_API"
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-DOTNET-01",
+      "category": "CONCURRENCY",
+      "invariant": "All I/O operations must be fully async (no .Result or .Wait())",
+      "status": "FAILED",
+      "file": "PaymentService.cs",
+      "line": 62,
+      "explanation": "Found synchronous .Result blocking on Oracle async query."
+    },
+    {
+      "id": "INV-DOTNET-02",
+      "category": "STORAGE",
+      "invariant": "All OracleConnection instances must be disposed with await using",
+      "status": "PASSED",
+      "file": "OracleLedgerRepository.cs",
+      "line": 40,
+      "explanation": "All 8 repository methods use `await using var conn`."
+    }
+  ],
+  "sourceFiles": {
+    "BillingController.cs": "namespace Enterprise.Billing.Controllers;\n\n[ApiController]\n[Route(\"api/[controller]\")]\npublic class BillingController : ControllerBase\n{\n    private readonly IPaymentService _paymentService;\n    private readonly SemaphoreSlim _semaphore = new(10, 10);\n\n    public BillingController(IPaymentService paymentService)\n    {\n        _paymentService = paymentService;\n    }\n\n    [HttpPost(\"batch\")]\n    public async Task<IActionResult> ProcessBillingBatch([FromBody] BillingBatchRequest request)\n    {\n        await _semaphore.WaitAsync();\n        try\n        {\n            var result = await _paymentService.ExecuteBillingAsync(request);\n            return Ok(result);\n        }\n        finally\n        {\n            _semaphore.Release();\n        }\n    }\n}",
+    "PaymentService.cs": "namespace Enterprise.Billing.Services;\n\npublic class PaymentService : IPaymentService\n{\n    private readonly IOracleLedgerRepository _oracleRepo;\n\n    public PaymentService(IOracleLedgerRepository oracleRepo)\n    {\n        _oracleRepo = oracleRepo;\n    }\n\n    public async Task<BillingResult> ExecuteBillingAsync(BillingBatchRequest request)\n    {\n        // BUG: Sync-over-async hazard\n        var customer = _oracleRepo.GetCustomerAsync(request.CustomerId).Result;\n        return await _oracleRepo.ProcessInvoiceAsync(customer, request.Amount);\n    }\n}"
+  },
+  "summary": "Enterprise Billing Service built on ASP.NET Core 8 and Oracle Database 19c. Analyzed ODP.NET connection lifecycles, EF Core query parameterization, and React UI bridge endpoints. Detected 1 critical Sync-over-Async Task deadlock hazard and verified 100% parameterization of Oracle SQL statements."
+}
+, scenarios: { scenarios: [] } },
+      java: { topology: {
+  "projectName": "E-Commerce Inventory (Spring Boot 3 + PostgreSQL)",
+  "targetPath": "/Users/gregday/projects/inventory-service",
+  "runtime": "java",
+  "modules": [
+    {
+      "id": "MOD-SPRING-ORDER",
+      "name": "Spring Boot Order Service",
+      "type": "backend_service",
+      "description": "Handles shopping cart checkouts, inventory stock locks, and PostgreSQL transactional boundaries.",
+      "files": ["OrderService.java", "OrderController.java"],
+      "role": "Transaction Coordinator",
+      "riskScore": "HIGH"
+    },
+    {
+      "id": "MOD-POSTGRES-JPA",
+      "name": "PostgreSQL HikariCP & Hibernate JPA",
+      "type": "storage",
+      "description": "PostgreSQL 16 persistence layer with HikariCP connection pooling, MVCC row-level locking, and JSONB document stores.",
+      "files": ["InventoryRepository.java", "ProductEntity.java"],
+      "role": "Data Persistence",
+      "riskScore": "MEDIUM"
+    }
+  ],
+  "structs": [
+    {
+      "id": "CLASS-OrderService",
+      "name": "OrderService",
+      "file": "OrderService.java",
+      "line": 18,
+      "fields": [
+        { "name": "inventoryRepo", "type": "InventoryRepository", "isMutex": false, "isMap": false, "isChannel": false, "isPointer": true },
+        { "name": "orderLock", "type": "ReentrantLock", "isMutex": true, "isMap": false, "isChannel": false, "isPointer": true }
+      ],
+      "hasMutex": true,
+      "mutexType": "ReentrantLock",
+      "methods": ["checkoutOrder", "reserveStock"],
+      "doc": "Service orchestrating order placements and stock reservations"
+    }
+  ],
+  "functions": [
+    {
+      "id": "FUNC-checkoutOrder",
+      "name": "checkoutOrder",
+      "receiver": "OrderService",
+      "file": "OrderService.java",
+      "startLine": 32,
+      "endLine": 60,
+      "signature": "public OrderResponse checkoutOrder(OrderRequest request)",
+      "calls": ["this.reserveStock", "inventoryRepo.save"],
+      "doc": "Places order and deducts stock under @Transactional"
+    }
+  ],
+  "concurrencyReport": {
+    "totalMutexes": 1,
+    "totalGoroutines": 12,
+    "hazards": [
+      {
+        "id": "HAZ-SPRING-TRANSACTION-BYPASS",
+        "severity": "CRITICAL",
+        "title": "Spring @Transactional Self-Invocation Proxy Bypass",
+        "file": "OrderService.java",
+        "line": 42,
+        "description": "Calling `this.reserveStock()` internally bypasses the Spring CGLIB/JDK proxy. `@Transactional(propagation = Propagation.REQUIRES_NEW)` is silently ignored, risking partial inventory deductions on crash.",
+        "remedy": "Inject self (`@Lazy OrderService self`) or extract stock reservation into a separate Spring bean.",
+        "category": "CONCURRENCY"
+      },
+      {
+        "id": "HAZ-HIBERNATE-N-PLUS-ONE",
+        "severity": "WARNING",
+        "title": "Hibernate N+1 Query Cascade on Products List",
+        "file": "InventoryRepository.java",
+        "line": 78,
+        "description": "Fetching 100 orders triggers 101 separate SELECT queries to PostgreSQL for item rows due to FetchType.LAZY in loop.",
+        "remedy": "Use `@EntityGraph(attributePaths = {\"items\"})` or `JOIN FETCH o.items`.",
+        "category": "PERFORMANCE"
+      }
+    ],
+    "idiomExplainers": [
+      {
+        "concept": "Spring AOP Proxy Interception & @Transactional",
+        "summary": "Spring applies transactional boundaries by wrapping beans in dynamic proxies. Direct intra-class method calls (`this.method()`) skip the proxy.",
+        "whyItMatters": "Nested transactions or rollbacks defined on internal helper methods will fail to trigger.",
+        "goRule": "Always invoke transactional methods through injected Spring beans, never `this.`.",
+        "codeExample": "@Service\npublic class OrderService {\n    @Transactional\n    public void placeOrder(OrderRequest req) {\n        // Delegated to separate bean to ensure proxy executes\n        inventoryService.reserve(req.getItems());\n    }\n}"
+      }
+    ]
+  },
+  "securityReport": {
+    "taintFlows": [],
+    "sanitizerAudits": [],
+    "sqlChecks": [
+      {
+        "file": "InventoryRepository.java",
+        "line": 50,
+        "querySnippet": "SELECT p FROM ProductEntity p WHERE p.sku = :sku",
+        "isParameterized": true
+      }
+    ]
+  },
+  "bridgeEndpoints": [],
+  "invariants": [
+    {
+      "id": "INV-SPRING-01",
+      "category": "CONCURRENCY",
+      "invariant": "@Transactional methods must not be called via this. reference",
+      "status": "FAILED",
+      "file": "OrderService.java",
+      "line": 42,
+      "explanation": "Direct self-invocation of reserveStock() bypasses transactional interceptor."
+    }
+  ],
+  "sourceFiles": {
+    "OrderService.java": "package com.enterprise.inventory.service;\n\n@Service\npublic class OrderService {\n    private final InventoryRepository inventoryRepo;\n\n    public OrderService(InventoryRepository inventoryRepo) {\n        this.inventoryRepo = inventoryRepo;\n    }\n\n    @Transactional\n    public OrderResponse checkoutOrder(OrderRequest request) {\n        // BUG: Self-invocation skips REQUIRES_NEW proxy\n        this.reserveStock(request.getItemId(), request.getQuantity());\n        return new OrderResponse(\"SUCCESS\");\n    }\n\n    @Transactional(propagation = Propagation.REQUIRES_NEW)\n    public void reserveStock(Long itemId, int qty) {\n        inventoryRepo.decrementStock(itemId, qty);\n    }\n}"
+  },
+  "summary": "E-Commerce Inventory & Order Placement Service built with Spring Boot 3 and PostgreSQL 16. Static analysis identified 1 critical Spring AOP @Transactional proxy bypass hazard and 1 N+1 Hibernate query bottleneck."
+}
+, scenarios: { scenarios: [] } },
+      python: { topology: {
+  "projectName": "FastAPI Task Processor (Python 3.12 + SQLite WAL)",
+  "targetPath": "/Users/gregday/projects/task-queue",
+  "runtime": "python",
+  "modules": [
+    {
+      "id": "MOD-FASTAPI-APP",
+      "name": "FastAPI Async Web Service",
+      "type": "backend_service",
+      "description": "High-throughput asynchronous job ingestion REST API with background task scheduling.",
+      "files": ["main.py", "tasks.py"],
+      "role": "API Gateway",
+      "riskScore": "HIGH"
+    },
+    {
+      "id": "MOD-SQLITE-STORAGE",
+      "name": "SQLite WAL Engine & Database Layer",
+      "type": "storage",
+      "description": "Embedded SQLite database with Write-Ahead Logging for task state tracking.",
+      "files": ["db.py", "models.py"],
+      "role": "Data Persistence",
+      "riskScore": "MEDIUM"
+    }
+  ],
+  "structs": [
+    {
+      "id": "CLASS-TaskManager",
+      "name": "TaskManager",
+      "file": "tasks.py",
+      "line": 12,
+      "fields": [
+        { "name": "lock", "type": "asyncio.Lock", "isMutex": true, "isMap": false, "isChannel": false, "isPointer": false },
+        { "name": "active_tasks", "type": "dict[str, Task]", "isMutex": false, "isMap": true, "isChannel": false, "isPointer": false }
+      ],
+      "hasMutex": true,
+      "mutexType": "asyncio.Lock",
+      "methods": ["enqueue_task", "process_queue"],
+      "doc": "Manages asynchronous worker queue"
+    }
+  ],
+  "functions": [
+    {
+      "id": "FUNC-submit_job",
+      "name": "submit_job",
+      "receiver": "FastAPI",
+      "file": "main.py",
+      "startLine": 20,
+      "endLine": 38,
+      "signature": "async def submit_job(job: JobRequest)",
+      "calls": ["db.insert_job_sync", "task_manager.enqueue_task"],
+      "doc": "HTTP endpoint ingesting jobs"
+    }
+  ],
+  "concurrencyReport": {
+    "totalMutexes": 1,
+    "totalGoroutines": 4,
+    "hazards": [
+      {
+        "id": "HAZ-PYTHON-EVENTLOOP-BLOCK",
+        "severity": "CRITICAL",
+        "title": "Synchronous Blocking SQLite Call in Async Event Loop",
+        "file": "main.py",
+        "line": 28,
+        "description": "Calling synchronous `sqlite3.connect().execute()` inside `async def submit_job` blocks the entire asyncio event loop, causing request starvation (0 TPS throughput) under concurrency.",
+        "remedy": "Use `aiosqlite` or offload blocking database operations via `await asyncio.to_thread(db.insert_job, job)`.",
+        "category": "CONCURRENCY"
+      },
+      {
+        "id": "HAZ-SQLITE-THREAD-SAFETY",
+        "severity": "WARNING",
+        "title": "sqlite3.Connection Shared Across Threadpool Workers",
+        "file": "db.py",
+        "line": 15,
+        "description": "SQLite connection instantiated without `check_same_thread=False` or separate per-thread instances. Triggers `sqlite3.ProgrammingError` when accessed by concurrent threads.",
+        "remedy": "Instantiate connections per thread or utilize an async connection pool.",
+        "category": "DATA_INTEGRITY"
+      }
+    ],
+    "idiomExplainers": [
+      {
+        "concept": "Asyncio Event Loop Non-Blocking Rule in Python",
+        "summary": "Python's asyncio runs on a single operating system thread per process. Any synchronous I/O or sleep blocks all other concurrent requests.",
+        "whyItMatters": "A 50ms synchronous SQLite write will delay 50 other pending API requests by 50ms each.",
+        "goRule": "Never call synchronous disk or network I/O inside `async def` without `asyncio.to_thread()`.",
+        "codeExample": "import asyncio\nimport aiosqlite\n\nasync def async_insert(job):\n    async with aiosqlite.connect('tasks.db') as db:\n        await db.execute('INSERT INTO jobs (id) VALUES (?)', (job.id,))\n        await db.commit()"
+      }
+    ]
+  },
+  "securityReport": {
+    "taintFlows": [],
+    "sanitizerAudits": [],
+    "sqlChecks": [
+      {
+        "file": "db.py",
+        "line": 34,
+        "querySnippet": "INSERT INTO jobs (id, payload) VALUES (?, ?)",
+        "isParameterized": true
+      }
+    ]
+  },
+  "bridgeEndpoints": [],
+  "invariants": [
+    {
+      "id": "INV-PY-01",
+      "category": "CONCURRENCY",
+      "invariant": "All database operations inside async routes must be non-blocking",
+      "status": "FAILED",
+      "file": "main.py",
+      "line": 28,
+      "explanation": "Synchronous sqlite3 call found in async route handler."
+    }
+  ],
+  "sourceFiles": {
+    "main.py": "from fastapi import FastAPI\nimport sqlite3\n\napp = FastAPI()\n\n@app.post(\"/jobs\")\nasync def submit_job(job_id: str, payload: str):\n    # BUG: Synchronous blocking call inside async def\n    conn = sqlite3.connect(\"tasks.db\")\n    conn.execute(\"INSERT INTO jobs VALUES (?, ?)\", (job_id, payload))\n    conn.commit()\n    return {\"status\": \"QUEUED\"}"
+  },
+  "summary": "FastAPI Task Ingestion API with embedded SQLite storage. AST inspection surfaced 1 critical event-loop blocking hazard and verified parameterization of insert queries."
+}
+, scenarios: { scenarios: [] } }
+    };
+
+    let currentProjectKey = "go";
+    let TOPOLOGY = ALL_PROJECTS.go.topology;
+    let SCENARIOS = ALL_PROJECTS.go.scenarios;
 
     let currentLens = "all";
-    let activeScenario = SCENARIOS.scenarios[0];
+    let activeScenario = SCENARIOS.scenarios[0] || null;
     let currentStepIdx = 0;
     let isPlaying = false;
     let playInterval = null;
@@ -4850,24 +5266,74 @@
     let svgPanX = 50;
     let svgPanY = 40;
 
-    // Node Positions Layout
-    const MODULE_COORDS = {
-      "MOD-FRONTEND": { x: 120, y: 180, label: "🎨 Svelte 5 Frontend", color: "#3b82f6" },
-      "MOD-APP":      { x: 380, y: 180, label: "🚀 App IPC Controller (Go)", color: "#00f0ff" },
-      "MOD-AUTH":     { x: 380, y: 380, label: "🔑 OAuth2 Auth Service", color: "#a855f7" },
-      "MOD-SYNC":     { x: 650, y: 180, label: "🔄 Sync Engine (Goroutines)", color: "#f59e0b" },
-      "MOD-SANITIZER":{ x: 650, y: 380, label: "🛡️ HTML Sanitizer (Regex)", color: "#f43f5e" },
-      "MOD-STORE":    { x: 920, y: 280, label: "💾 SQLite Store (FTS5)", color: "#10b981" }
-    };
+    function switchProject(key) {
+      if (!ALL_PROJECTS[key]) return;
+      currentProjectKey = key;
+      TOPOLOGY = ALL_PROJECTS[key].topology;
+      SCENARIOS = ALL_PROJECTS[key].scenarios;
+      
+      const badge = document.getElementById("project-runtime-badge");
+      badge.textContent = (TOPOLOGY.runtime || key).toUpperCase() + " IR VERIFIED";
 
-    const EDGES = [
-      { from: "MOD-FRONTEND", to: "MOD-APP", label: "Wails IPC (SyncMailbox)", type: "bridge" },
-      { from: "MOD-APP", to: "MOD-AUTH", label: "GetToken()", type: "call" },
-      { from: "MOD-APP", to: "MOD-SYNC", label: "go SyncMailbox()", type: "concurrency" },
-      { from: "MOD-SYNC", to: "MOD-SANITIZER", label: "SanitizeEmailHTML()", type: "security" },
-      { from: "MOD-SANITIZER", to: "MOD-STORE", label: "InsertMessage()", type: "storage" },
-      { from: "MOD-APP", to: "MOD-STORE", label: "GetThreads()", type: "storage" }
-    ];
+      const hazardBtn = document.getElementById("btn-hazards-modal");
+      const hazardCount = (TOPOLOGY.concurrencyReport && TOPOLOGY.concurrencyReport.hazards) ? TOPOLOGY.concurrencyReport.hazards.length : 0;
+      hazardBtn.textContent = `🚨 ${hazardCount} Critical Hazards`;
+
+      renderSidebarModules();
+      renderScenarioSelect();
+      renderGraph();
+
+      if (SCENARIOS.scenarios && SCENARIOS.scenarios.length > 0) {
+        loadScenario(0);
+      } else {
+        document.getElementById("scenario-step-title").textContent = "Scenario Engine Ready";
+        document.getElementById("scenario-step-desc").textContent = `Architecture, invariants, and hazards loaded for ${TOPOLOGY.projectName}.`;
+        if (TOPOLOGY.modules && TOPOLOGY.modules.length > 0) {
+          showCodeForModule(TOPOLOGY.modules[0]);
+        }
+      }
+    }
+
+    function getModuleCoordsAndEdges() {
+      const coords = {};
+      const edges = [];
+      const colors = ["#3b82f6", "#00f0ff", "#a855f7", "#f59e0b", "#f43f5e", "#10b981"];
+
+      if (TOPOLOGY.modules) {
+        TOPOLOGY.modules.forEach((mod, idx) => {
+          let x = 120 + (idx % 3) * 320;
+          let y = 180 + Math.floor(idx / 3) * 200;
+          
+          if (mod.type.includes("frontend") || mod.type.includes("ui")) {
+            x = 140; y = 200;
+          } else if (mod.type.includes("storage") || mod.type.includes("database")) {
+            x = 860; y = 200 + (idx % 2) * 160;
+          } else if (mod.type.includes("security") || mod.type.includes("auth")) {
+            x = 500; y = 360;
+          } else {
+            x = 500; y = 180;
+          }
+
+          coords[mod.id] = {
+            x: x,
+            y: y,
+            label: mod.name,
+            color: colors[idx % colors.length]
+          };
+        });
+
+        // Add auto edges between consecutive modules or based on bridge/storage
+        for (let i = 0; i < TOPOLOGY.modules.length - 1; i++) {
+          edges.push({
+            from: TOPOLOGY.modules[i].id,
+            to: TOPOLOGY.modules[i+1].id,
+            label: "Calls / Dispatches",
+            type: "call"
+          });
+        }
+      }
+      return { coords, edges };
+    }
 
     // Initialize UI
     function init() {
@@ -5003,11 +5469,12 @@
 
       const edgesGroup = document.getElementById("edges-group");
       const nodesGroup = document.getElementById("nodes-group");
+      const { coords, edges } = getModuleCoordsAndEdges();
 
       // Draw Edges
-      EDGES.forEach(edge => {
-        const fromCoord = MODULE_COORDS[edge.from];
-        const toCoord = MODULE_COORDS[edge.to];
+      edges.forEach(edge => {
+        const fromCoord = coords[edge.from];
+        const toCoord = coords[edge.to];
         if (!fromCoord || !toCoord) return;
 
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -5027,8 +5494,8 @@
       });
 
       // Draw Nodes
-      Object.keys(MODULE_COORDS).forEach(modId => {
-        const coord = MODULE_COORDS[modId];
+      Object.keys(coords).forEach(modId => {
+        const coord = coords[modId];
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         g.setAttribute("transform", `translate(${coord.x}, ${coord.y})`);
         g.style.cursor = "pointer";
@@ -5077,7 +5544,7 @@
       const badge = document.getElementById("code-line-badge");
       const viewer = document.getElementById("code-content");
 
-      const rawContent = TOPOLOGY.sourceFiles[fileName] || "// Source file: " + fileName;
+      const rawContent = (TOPOLOGY.sourceFiles && TOPOLOGY.sourceFiles[fileName]) || "// Source file: " + fileName;
       title.textContent = fileName;
       badge.textContent = `Line ${targetLine}`;
 
