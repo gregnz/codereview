@@ -1,0 +1,12 @@
+node_modules/
+bin/
+graph.json
+*graph.json
+*.log
+.DS_Store
+.codereview/
+.claude/
+*.local.json
+conversation_report.html
+report.html
+tools/temp/

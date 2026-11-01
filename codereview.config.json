@@ -1,0 +1,131 @@
+{
+  "layers": {
+    "Presentation": [
+      "cli.js",
+      "ast-outline.js",
+      "ast-inspect.js",
+      "tools/conversation-analyzer.js"
+    ],
+    "Application / Controllers": [
+      "commands"
+    ],
+    "Presentation / Exporters": [
+      "exporters",
+      "html-reporter.js"
+    ],
+    "Domain Services": [
+      "graph",
+      "conversation"
+    ],
+    "Domain Entities & Metrics": [
+      "blast-scoring.js",
+      "class-metrics.js"
+    ],
+    "Infrastructure": [
+      "parser",
+      "config",
+      "vcs",
+      "cache",
+      "cyclomatic.js",
+      "cognitive.js",
+      "telemetry"
+    ]
+  },
+  "layerRanks": {
+    "Presentation": 1,
+    "Application / Controllers": 2,
+    "Presentation / Exporters": 2,
+    "Domain Services": 3,
+    "Domain Entities & Metrics": 4,
+    "Infrastructure": 5
+  },
+  "concepts": [
+    {
+      "id": "ast_parsing",
+      "name": "AST & Syntax Analysis",
+      "category": "Parsing / Grammar",
+      "description": "Tree-sitter AST parsing, node traversal, identifier extraction, and syntax trees.",
+      "keywords": [
+        "ast",
+        "parser",
+        "treesitter",
+        "node",
+        "tree",
+        "syntax",
+        "harvest",
+        "grammar",
+        "declaration"
+      ]
+    },
+    {
+      "id": "call_graph_reachability",
+      "name": "Call Graph & Reachability",
+      "category": "Graph / Resolution",
+      "description": "Call graph construction, multi-hop reachability, cycle detection, and callee resolution.",
+      "keywords": [
+        "graph",
+        "edge",
+        "call",
+        "caller",
+        "callee",
+        "reachability",
+        "cycle",
+        "inbound",
+        "outbound"
+      ]
+    },
+    {
+      "id": "blast_metrics",
+      "name": "Complexity & Blast Metrics",
+      "category": "Metrics / Risk",
+      "description": "Blast radius calculation, risk scoring, cyclomatic, cognitive, and C&K OO metrics.",
+      "keywords": [
+        "blast",
+        "risk",
+        "complexity",
+        "cognitive",
+        "cyclomatic",
+        "hotspot",
+        "scoring",
+        "coupling"
+      ]
+    },
+    {
+      "id": "concept_routing",
+      "name": "Intent & Concept Routing",
+      "category": "Semantic / Routing",
+      "description": "Bridges developer intent terms to code subsystems via stemmed token matching.",
+      "keywords": [
+        "concept",
+        "taxonomy",
+        "stem",
+        "tokenize",
+        "routing",
+        "semantic",
+        "intent"
+      ]
+    },
+    {
+      "id": "conversation_audit",
+      "name": "Conversation & Skill Audit",
+      "category": "Audit / Compliance",
+      "description": "Audits agent conversations for skill adherence, missed tool opportunities, and rule violations.",
+      "keywords": [
+        "conversation",
+        "transcript",
+        "skill",
+        "rule",
+        "adherence",
+        "timeline",
+        "scorecard"
+      ]
+    }
+  ],
+  "ignore": [
+    "vendor",
+    "dist",
+    "build",
+    "coverage",
+    ".codereview"
+  ]
+}
