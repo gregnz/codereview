@@ -1,6 +1,8 @@
 const { DEFAULT_LAYERS, getLayerForFile, getEffectiveSubsystems } = require('../config/layers');
 const { computeSymbolBlastSummary } = require('../metrics/blast-scoring');
 
+const MAX_EXPORTED_CONCEPT_INTERSECTIONS = 10000;
+
 function exportGraphIR(allFileResults, blastIndex, rootDir, changedSymbolIds = new Set()) {
   const nodes = [];
 
@@ -19,6 +21,8 @@ function exportGraphIR(allFileResults, blastIndex, rootDir, changedSymbolIds = n
       isEntryPoint: Boolean(br.entryPointType),
       entryPointType: br.entryPointType,
       entryPointPaths: br.entryPointPaths || [],
+      cycleId: sym.cycleId ?? null,
+      cycleSize: Array.isArray(sym.cycleMembers) ? sym.cycleMembers.length : 0,
       startLine: sym.startLine,
       endLine: sym.endLine,
       loc: sym.loc,
@@ -38,7 +42,6 @@ function exportGraphIR(allFileResults, blastIndex, rootDir, changedSymbolIds = n
       efferentCoupling: br.efferentCoupling,
       instability: br.instability,
       inCycle: br.inCycle,
-      cycleMembers: br.cycleMembers,
       layerViolationsCount: br.layerViolationsCount,
       classMetrics: br.classMetrics,
       riskScore: br.riskScore,
@@ -53,14 +56,15 @@ function exportGraphIR(allFileResults, blastIndex, rootDir, changedSymbolIds = n
         hop2Callers: br.hop2Count,
         transitiveCallers: br.transitiveCount,
         filesAffected: br.filesCount,
-        callers: br.directCallers,
-        outboundTargets: br.outboundTargets
+        outboundCount: br.outboundCount
       }
     });
   }
 
   // Filter edges to valid catalog items
   const validEdges = blastIndex.edges.filter(e => blastIndex.catalog.has(e.source) && blastIndex.catalog.has(e.target));
+  const allConceptIntersections = blastIndex.conceptMap ? blastIndex.conceptMap.intersections : [];
+  const exportedConceptIntersections = allConceptIntersections.slice(0, MAX_EXPORTED_CONCEPT_INTERSECTIONS);
 
   return {
     metadata: {
@@ -73,6 +77,8 @@ function exportGraphIR(allFileResults, blastIndex, rootDir, changedSymbolIds = n
       totalLayerViolations: blastIndex.layerViolations ? blastIndex.layerViolations.length : 0,
       layerViolationsCount: blastIndex.layerViolations ? blastIndex.layerViolations.length : 0,
       classesCount: blastIndex.classes ? blastIndex.classes.length : 0,
+      totalConceptIntersections: allConceptIntersections.length,
+      conceptIntersectionsTruncated: allConceptIntersections.length > exportedConceptIntersections.length,
       hasDiff: changedSymbolIds.size > 0,
       changedCount: changedSymbolIds.size
     },
@@ -86,7 +92,7 @@ function exportGraphIR(allFileResults, blastIndex, rootDir, changedSymbolIds = n
       symbolsCount: c.symbols.length,
       governingEnums: c.governingEnums.map(e => ({ id: e.id, name: e.name, file: e.file }))
     })) : [],
-    conceptIntersections: blastIndex.conceptMap ? blastIndex.conceptMap.intersections : [],
+    conceptIntersections: exportedConceptIntersections,
     nodes,
     edges: validEdges
   };

@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Parser = require('tree-sitter');
 const JavaScript = require('tree-sitter-javascript');
+const { parseJavaSource } = require('./java');
 
 const {
   JS_BUILTINS,
@@ -406,6 +407,10 @@ function extractScriptFromSvelte(sourceCode) {
  * complexity metrics, and direct interaction references.
  */
 function parseFileAST(filePath, sourceCode) {
+  if (path.extname(filePath).toLowerCase() === '.java') {
+    return parseJavaSource(filePath, sourceCode);
+  }
+
   const codeToParse = filePath.endsWith('.svelte') ? extractScriptFromSvelte(sourceCode) : sourceCode;
   const parser = new Parser();
   parser.setLanguage(JavaScript);
@@ -478,15 +483,16 @@ function parseFileAST(filePath, sourceCode) {
 }
 
 const DEFAULT_IGNORED_DIRS = new Set([
-  'node_modules', '.git', '.codereview', 'dist', 'build', 'coverage', '.next', 'out', '.claude', 'vendor'
+  'node_modules', '.git', '.codereview', 'dist', 'build', 'coverage', '.next', 'out', '.claude', 'vendor', 'ecrs-lib'
 ]);
 
-const SUPPORTED_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx', '.svelte']);
+const SUPPORTED_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx', '.svelte', '.java', '.cs', '.html']);
 
 function isIgnoredEntry(entryName, customIgnore) {
   if (entryName.startsWith('.')) return true;
-  if (DEFAULT_IGNORED_DIRS.has(entryName)) return true;
-  if (Array.isArray(customIgnore) && customIgnore.includes(entryName)) return true;
+  const normalizedName = entryName.toLowerCase();
+  if (DEFAULT_IGNORED_DIRS.has(normalizedName)) return true;
+  if (Array.isArray(customIgnore) && customIgnore.some(name => name.toLowerCase() === normalizedName)) return true;
   return false;
 }
 

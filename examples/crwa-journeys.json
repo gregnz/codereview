@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "description": "Provisional CRWA journeys based on the user guide reviewed in 2024 and the inspected website and API. Confirm current behavior with operators and tests.",
+  "journeys": [
+    {
+      "id": "load-data",
+      "title": "Load and validate arrangement and collateral data",
+      "goal": "Prepare source data for the reporting period before moving to adjustments.",
+      "prerequisites": ["A reporting period is available", "The source files have been placed in the appropriate data load location"],
+      "steps": [
+        {
+          "id": "start-import",
+          "title": "Start each available import",
+          "screen": "Arrangements and Collateral",
+          "action": "Choose the play action for each available arrangement or collateral file.",
+          "expected": "The file is processed and its status becomes Complete when there are no outstanding issues.",
+          "alternatives": ["An incomplete import requires investigation before continuing."],
+          "evidence": [
+            { "repo": "website", "path": "src/app/home/home.component.html" },
+            { "repo": "website", "path": "src/app/home/current-dataloads/current-dataloads.component.html" },
+            { "repo": "website", "path": "src/app/home/current-dataloads/current-dataloads.component.ts" },
+            { "repo": "api", "path": "WebApi/Controllers/ImportsController.cs" }
+          ],
+          "sources": [{ "title": "CRWA User Guide", "section": "6.1", "url": "https://bnz.sharepoint.com/:w:/r/teams/Elevenses/Shared%20Documents/CRWA%20and%20IFRS9/00%20-%20Resources/CRWA_User%20Guide.docx?d=w7f8db67687da485baddbd12d807679c2&csf=1&web=1" }]
+        },
+        {
+          "id": "review-validation",
+          "title": "Review and resolve validation failures",
+          "screen": "Data import details",
+          "action": "Open the file details, inspect validation failures, and either correct values or record a reason for not correcting them.",
+          "expected": "Reload corrected data; once all failures have been dealt with, the file can become Complete.",
+          "alternatives": ["Corrections can apply to matching failures or individual rows.", "The guide says reasons alone do not require a reload."],
+          "evidence": [
+            { "repo": "website", "path": "src/app/home/dataload-details/dataload-details.component.html" },
+            { "repo": "website", "path": "src/app/home/validation-failures/validation-failures.component.html" },
+            { "repo": "website", "path": "src/app/home/validation-failures/validation-failures.component.ts" },
+            { "repo": "api", "path": "WebApi/Controllers/ImportsController.cs" }
+          ],
+          "sources": [{ "title": "CRWA User Guide", "section": "6.2-6.5", "url": "https://bnz.sharepoint.com/:w:/r/teams/Elevenses/Shared%20Documents/CRWA%20and%20IFRS9/00%20-%20Resources/CRWA_User%20Guide.docx?d=w7f8db67687da485baddbd12d807679c2&csf=1&web=1" }]
+        }
+      ]
+    },
+    {
+      "id": "calculate",
+      "title": "Run and monitor a calculation",
+      "goal": "Calculate credit risk results for the current reporting period.",
+      "prerequisites": ["Arrangement and collateral data have been loaded", "An appropriate reporting period is open"],
+      "steps": [
+        {
+          "id": "prepare-adjustments",
+          "title": "Prepare adjustments",
+          "screen": "Adjustments",
+          "action": "Review arrangement and collateral additions and updates; load or exclude adjustment types as appropriate.",
+          "expected": "The screen shows the state of adjustment types and any pending items.",
+          "alternatives": ["The guide describes excluding all adjustment types for an initial calculation without adjustments.", "A new Arrangement Add may require completed collateral adjustments to be revalidated; confirm current behavior."],
+          "evidence": [
+            { "repo": "website", "path": "src/app/adjustments/adjustments.component.html" },
+            { "repo": "website", "path": "src/app/adjustments/current-dataloads/current-dataloads.component.ts" },
+            { "repo": "website", "path": "src/app/adjustments/calculations/calculations.component.html" }
+          ],
+          "sources": [{ "title": "CRWA User Guide", "section": "7-9", "url": "https://bnz.sharepoint.com/:w:/r/teams/Elevenses/Shared%20Documents/CRWA%20and%20IFRS9/00%20-%20Resources/CRWA_User%20Guide.docx?d=w7f8db67687da485baddbd12d807679c2&csf=1&web=1" }]
+        },
+        {
+          "id": "start-calculation",
+          "title": "Start the calculation",
+          "screen": "Adjustments",
+          "action": "Choose Run calculation and confirm.",
+          "expected": "A calculation is requested and progress can be monitored.",
+          "alternatives": ["A rerun warns that the previous calculation will be overwritten.", "The confirmation can warn about pending adjustments being excluded."],
+          "evidence": [
+            { "repo": "website", "path": "src/app/adjustments/calculations/calculations.component.html" },
+            { "repo": "website", "path": "src/app/adjustments/calculations/calculations.component.ts" },
+            { "repo": "website", "path": "src/app/shared/_services/calculation.service.ts" },
+            { "repo": "api", "path": "WebApi/Controllers/CalculationsController.cs" }
+          ],
+          "sources": [{ "title": "CRWA User Guide", "section": "7.1", "url": "https://bnz.sharepoint.com/:w:/r/teams/Elevenses/Shared%20Documents/CRWA%20and%20IFRS9/00%20-%20Resources/CRWA_User%20Guide.docx?d=w7f8db67687da485baddbd12d807679c2&csf=1&web=1" }]
+        },
+        {
+          "id": "monitor-calculation",
+          "title": "Monitor progress and outcomes",
+          "screen": "Calculation",
+          "action": "Review the displayed calculation steps and durations.",
+          "expected": "The screen presents the current progress and queued, successful or failed state.",
+          "alternatives": ["The guide describes reviewing calculation output in the database; verify whether this remains current."],
+          "evidence": [
+            { "repo": "website", "path": "src/app/calculation/calculation.component.html" },
+            { "repo": "website", "path": "src/app/calculation/calculation.component.ts" },
+            { "repo": "website", "path": "src/app/shared/_services/calculation.service.ts" },
+            { "repo": "api", "path": "WebApi/Controllers/CalculationsController.cs" }
+          ],
+          "sources": [{ "title": "CRWA User Guide", "section": "7.1-7.2", "url": "https://bnz.sharepoint.com/:w:/r/teams/Elevenses/Shared%20Documents/CRWA%20and%20IFRS9/00%20-%20Resources/CRWA_User%20Guide.docx?d=w7f8db67687da485baddbd12d807679c2&csf=1&web=1" }]
+        }
+      ]
+    },
+    {
+      "id": "finalise-period",
+      "title": "Finalise a reporting period",
+      "goal": "Complete the reporting period once the calculation and adjustment requirements are satisfied.",
+      "prerequisites": ["A calculation has completed successfully", "Adjustment types meet the displayed requirements"],
+      "steps": [
+        {
+          "id": "confirm-finalise",
+          "title": "Confirm finalisation",
+          "screen": "Adjustments",
+          "action": "Choose Finalise and confirm the reporting-period action.",
+          "expected": "The reporting period is finalised; the UI presents the appropriate follow-on state.",
+          "alternatives": ["Warnings explain conditions that prevent finalisation.", "A finalised period can offer a Reopen action subject to conditions."],
+          "evidence": [
+            { "repo": "website", "path": "src/app/adjustments/calculations/calculations.component.html" },
+            { "repo": "website", "path": "src/app/adjustments/calculations/calculations.component.ts" },
+            { "repo": "website", "path": "src/app/shared/_services/reporting-period.service.ts" },
+            { "repo": "api", "path": "WebApi/Controllers/ReportingPeriodsController.cs" }
+          ],
+          "sources": [{ "title": "CRWA User Guide", "section": "10", "url": "https://bnz.sharepoint.com/:w:/r/teams/Elevenses/Shared%20Documents/CRWA%20and%20IFRS9/00%20-%20Resources/CRWA_User%20Guide.docx?d=w7f8db67687da485baddbd12d807679c2&csf=1&web=1" }]
+        }
+      ]
+    }
+  ],
+  "components": [
+    {
+      "id": "website",
+      "title": "Angular website",
+      "responsibility": "Presents operator screens, sends requests and displays progress and validation results.",
+      "relationships": ["Uses the calculation and reporting-period services to call the API."],
+      "evidence": [
+        { "repo": "website", "path": "src/app/app-routing.module.ts" },
+        { "repo": "website", "path": "src/app/shared/_services/calculation.service.ts" },
+        { "repo": "website", "path": "src/app/shared/_services/reporting-period.service.ts" }
+      ]
+    },
+    {
+      "id": "api",
+      "title": "Credit risk API",
+      "responsibility": "Exposes import, calculation and reporting-period operations.",
+      "relationships": ["Receives requests from the website and delegates work through application handlers."],
+      "evidence": [
+        { "repo": "api", "path": "WebApi/Controllers/BaseController.cs" },
+        { "repo": "api", "path": "WebApi/Controllers/ImportsController.cs" },
+        { "repo": "api", "path": "WebApi/Controllers/CalculationsController.cs" },
+        { "repo": "api", "path": "WebApi/Controllers/ReportingPeriodsController.cs" }
+      ]
+    },
+    {
+      "id": "processor",
+      "title": "Background processing",
+      "responsibility": "Runs queued import and calculation processing outside the web request.",
+      "relationships": ["The API and website expose progress and results of background work."],
+      "evidence": [{ "repo": "api", "path": "AzureWebJobs/ArrangementProcessor/Functions.cs" }]
+    }
+  ]
+}

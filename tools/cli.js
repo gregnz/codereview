@@ -12,6 +12,7 @@ const path = require('node:path');
 
 const { findProjectRoot, loadProjectConfig } = require('./src/config/layers');
 const { parseFileAST, collectFiles } = require('./src/parser/javascript');
+const { parseProjectFiles } = require('./src/parser/project-parser');
 const { buildBlastRadiusIndex } = require('./src/graph/graph-builder');
 const { exportGraphIR } = require('./src/exporters/graph-ir');
 const { formatSymbolsMarkdown } = require('./src/exporters/markdown-map');
@@ -27,6 +28,7 @@ const { resolveGraphPaths, isCacheFresh, loadCachedGraph, saveCachedGraph } = re
 const { runConversationCommand } = require('./src/commands/conversation');
 const { runImproveCommand, runFeedbackCommand } = require('./src/commands/improve');
 const { logTelemetryEvent } = require('./src/telemetry/feedback-logger');
+const { runJourneyCommand } = require('./src/commands/journey');
 
 function printHelp() {
   console.log(`
@@ -36,6 +38,7 @@ Usage:
   codereview <subcommand> [arguments...] [options]
 
 Core Subcommands:
+  journey <show|diff> ...  Walk through use cases or compare their implementation evidence
   review [target] [dir]    Plain-English mentoring & coaching review of code decisions
   decisions [target] [dir] Explore program decisions across the 4 Reviewer Lenses
   concept <query> [dir]    Fast human intent concept query (auto-cached)
@@ -81,13 +84,7 @@ function resolveTarget(dirArg = '.') {
 function buildGraphIndex(targetDir, rootDir) {
   loadProjectConfig(rootDir);
   const files = collectFiles(targetDir);
-  const allFileResults = [];
-
-  for (const file of files) {
-    const code = fs.readFileSync(file, 'utf8');
-    const res = parseFileAST(file, code);
-    allFileResults.push({ filePath: file, ...res });
-  }
+  const allFileResults = parseProjectFiles(files, rootDir);
 
   const blastIndex = buildBlastRadiusIndex(allFileResults, rootDir);
   const graphData = exportGraphIR(allFileResults, blastIndex, rootDir, new Set());
@@ -414,6 +411,8 @@ function main() {
 
   try {
     switch (subcommand) {
+      case 'journey':
+        return runJourneyCommand(args.slice(1), { json: asJson });
       case 'review':
         return handleReviewCommand(args[1], args[2], asJson);
       case 'decisions':

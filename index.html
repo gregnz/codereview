@@ -5,23 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AST Explorer & Multi-Hop Blast Radius Navigator</title>
   <script src="vendor/d3.min.js"></script>
+  <link rel="stylesheet" href="journey-blueprint.css">
   <style>
     :root {
-      --bg: #090d16;
-      --bg-panel: #0f172a;
-      --bg-panel-alt: #131d35;
-      --border: #1e293b;
-      --border-focus: #38bdf8;
-      --text: #e2e8f0;
-      --text-muted: #94a3b8;
-      --text-dim: #64748b;
-      --accent-blue: #38bdf8;
-      --accent-cyan: #22d3ee;
-      --accent-purple: #c084fc;
-      --risk-critical: #ef4444;
-      --risk-high: #f97316;
-      --risk-med: #f59e0b;
-      --risk-low: #10b981;
+      --bg: #faf6f0;
+      --bg-panel: #fffdfa;
+      --bg-panel-alt: #f1ece5;
+      --border: #d7d0c8;
+      --border-focus: #315d55;
+      --text: #1d1d1d;
+      --text-muted: #595752;
+      --text-dim: #706c66;
+      --accent-blue: #315d55;
+      --accent-cyan: #315d55;
+      --accent-purple: #755067;
+      --risk-critical: #a63e38;
+      --risk-high: #a15332;
+      --risk-med: #80621c;
+      --risk-medium: var(--risk-med);
+      --risk-low: #386c4b;
       --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
@@ -603,6 +605,13 @@
       min-height: 0;
       overflow: hidden;
       background: var(--bg);
+    }
+
+    #journey-view {
+      display: none;
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
     }
 
     /* Graph Toolbar */
@@ -1325,6 +1334,67 @@
       stroke-linejoin: round;
       pointer-events: none;
     }
+    .filter-bar, .graph-toolbar, .view-tabs, .call-tree, pre.mermaid-code { background: var(--bg); }
+    button.btn-ctrl:hover, .hud-btn:hover, .filter-tab:hover, .tree-item:hover, .view-tab-btn:hover { background: var(--bg-panel-alt); }
+    .stat-pill, .pill-callers, button.btn-ctrl.active, .filter-tab.active, .tree-item.selected, .toggle-chip.active {
+      background: #e2ebe6; border-color: #a9beb2; color: var(--accent-blue);
+    }
+    .stat-pill.cycle, .pill-cycle, .alert-cycle { color: var(--accent-purple); }
+    .tree-item.selected, .blast-title, .metric-item-val, .call-node:hover, .dep-title, .dep-name { color: var(--text); }
+    .view-tab-btn.active { color: #fffdfa; box-shadow: none; }
+    .badge-method { background: #e2ebe6; color: #315d55; }
+    .badge-fn { background: #e5eddf; color: #386c4b; }
+    .badge-class { background: #eee3e9; color: #755067; }
+    .badge-enum { background: #f1e7db; color: #86512f; }
+    .pill-cyclo, .risk-MEDIUM, .hop-transitive, .dep-type-pill.extends { color: var(--risk-med); }
+    .pill-breach, .pill-mono, .risk-CRITICAL, .hop-direct, .alert-violation { color: var(--risk-critical); }
+    .risk-HIGH { color: var(--risk-high); }
+    .risk-LOW, .hop-root { color: var(--risk-low); }
+    .pill-depth { color: var(--text-muted); }
+    .hop-outbound, .dep-type-pill.instantiates, pre.mermaid-code { color: var(--accent-blue); }
+    .hop-event, .dep-type-pill.calls { color: var(--accent-purple); }
+    .file-group-header, .inspector-row, .shortcut-row, .dep-header, .dep-item { border-color: var(--border); }
+    .call-node:hover { background: #e2ebe6; }
+    .graph-legend, .zoom-hud, .graph-tooltip, .drawer-dep-section { background: rgba(255, 253, 250, 0.96); }
+    .graph-legend, .graph-tooltip { box-shadow: 0 8px 20px rgba(29, 29, 29, 0.12); }
+    .graph-tooltip { color: var(--text); }
+    .svg-container { background: var(--bg); }
+    .swimlane-rect { fill: #f1ece5; stroke: var(--border); }
+    .swimlane-label, .card-title, .edge-badge-text { fill: var(--text); }
+    .card-bg, .edge-badge-bg { fill: var(--bg-panel); }
+    .graph-card.selected .card-bg { stroke: var(--accent-blue) !important; filter: none !important; }
+    .graph-card:hover .card-bg, .graph-card.is-caller .card-bg, .graph-card.is-callee .card-bg { filter: none !important; }
+    .graph-link.extends { stroke: var(--risk-med); }
+    .graph-link.instantiates { stroke: var(--accent-blue); }
+    .graph-link.calls { stroke: var(--accent-purple); }
+    .graph-link.is-violation { stroke: var(--risk-critical) !important; }
+    .graph-link.is-cycle { stroke: var(--accent-purple) !important; }
+    .graph-link.is-inbound { stroke: var(--risk-low) !important; }
+    .chip-extends { background: var(--risk-med); }
+    .chip-instantiates { background: var(--accent-blue); border-color: var(--accent-blue); }
+    .chip-calls { background: var(--accent-purple); }
+    .edge-badge-bg { filter: none; }
+    #badge-legend-bar { background: var(--bg-panel) !important; }
+    [style*="color: #fff"] { color: var(--text) !important; }
+    [style*="color: #34d399"] { color: var(--risk-low) !important; }
+    [style*="color: #38bdf8"], [style*="color: #06b6d4"] { color: var(--accent-blue) !important; }
+    [style*="color: #fbbf24"] { color: var(--risk-med) !important; }
+    [style*="color: #818cf8"] { color: var(--accent-purple) !important; }
+    [style*="background: rgba(0,0,0,0.25)"] { background: var(--bg-panel-alt) !important; border-color: var(--border) !important; }
+    pre[style*="background: #060913"] { background: var(--bg-panel-alt) !important; }
+    .node-text-title { fill: var(--text); stroke: var(--bg); }
+    .node-text-sub { fill: var(--text-muted); stroke: var(--bg); }
+    .graph-node.selected .node-circle { stroke: var(--accent-blue) !important; filter: none !important; }
+    #arrow-extends path { fill: var(--risk-med); }
+    #arrow-instantiates path, #arrow-callee path { fill: var(--accent-blue); }
+    #arrow-calls path, #arrow-cycle path { fill: var(--accent-purple); }
+    #arrow-violation path { fill: var(--risk-critical); }
+    #arrow-caller path { fill: var(--risk-low); }
+    .graph-legend .legend-grid:last-child .legend-item:nth-child(1) .legend-line { border-color: var(--risk-med) !important; }
+    .graph-legend .legend-grid:last-child .legend-item:nth-child(2) .legend-line { border-color: var(--accent-blue) !important; }
+    .graph-legend .legend-grid:last-child .legend-item:nth-child(3) .legend-line,
+    .graph-legend .legend-grid:last-child .legend-item:nth-child(5) .legend-line { border-color: var(--accent-purple) !important; }
+    .graph-legend .legend-grid:last-child .legend-item:nth-child(4) .legend-line { border-color: var(--risk-critical) !important; }
   </style>
 </head>
 <body>
@@ -1344,6 +1414,7 @@
     <div class="view-tabs" role="tablist">
       <button id="view-tab-nav" class="view-tab-btn active" role="tab" aria-selected="true" title="Keyboard Text & Blast Radius Navigator (T)">⌨️ Text Navigator</button>
       <button id="view-tab-graph" class="view-tab-btn" role="tab" aria-selected="false" title="D3.js Class Architecture Graph (G)">🌐 D3 Class Graph</button>
+      <button id="view-tab-journey" class="view-tab-btn" role="tab" aria-selected="false">Journey Blueprint</button>
     </div>
 
     <div class="search-box">
@@ -1593,6 +1664,8 @@
       </div>
     </div>
   </div>
+
+  <div id="journey-view" role="tabpanel" aria-labelledby="view-tab-journey"></div>
 
   <!-- Modal: Badge Guide & Keyboard Shortcuts -->
   <div id="shortcuts-modal">
@@ -2262,6 +2335,7 @@
 
     // Keyboard Navigation
     window.addEventListener('keydown', (e) => {
+      if (activeView === 'journey') return;
       // Don't intercept when search input is focused, unless Esc
       if (document.activeElement === document.getElementById('filter-input')) {
         if (e.key === 'Escape') {
@@ -2701,31 +2775,55 @@
       viewTabsInitialized = true;
       const tabNav = document.getElementById('view-tab-nav');
       const tabGraph = document.getElementById('view-tab-graph');
+      const tabJourney = document.getElementById('view-tab-journey');
       const navView = document.getElementById('nav-view');
       const graphView = document.getElementById('graph-view');
+      const journeyView = document.getElementById('journey-view');
 
       tabNav.addEventListener('click', () => {
         activeView = 'nav';
+        document.body.classList.remove('journey-mode');
         tabNav.classList.add('active');
         tabNav.setAttribute('aria-selected', 'true');
         tabGraph.classList.remove('active');
         tabGraph.setAttribute('aria-selected', 'false');
+        tabJourney.classList.remove('active');
+        tabJourney.setAttribute('aria-selected', 'false');
 
         navView.style.display = 'flex';
         graphView.style.display = 'none';
+        journeyView.style.display = 'none';
       });
 
       tabGraph.addEventListener('click', () => {
         activeView = 'graph';
+        document.body.classList.remove('journey-mode');
         tabGraph.classList.add('active');
         tabGraph.setAttribute('aria-selected', 'true');
         tabNav.classList.remove('active');
         tabNav.setAttribute('aria-selected', 'false');
+        tabJourney.classList.remove('active');
+        tabJourney.setAttribute('aria-selected', 'false');
 
         navView.style.display = 'none';
         graphView.style.display = 'flex';
+        journeyView.style.display = 'none';
 
         ensureD3GraphRendered();
+      });
+
+      tabJourney.addEventListener('click', () => {
+        activeView = 'journey';
+        document.body.classList.add('journey-mode');
+        tabJourney.classList.add('active');
+        tabJourney.setAttribute('aria-selected', 'true');
+        tabNav.classList.remove('active');
+        tabNav.setAttribute('aria-selected', 'false');
+        tabGraph.classList.remove('active');
+        tabGraph.setAttribute('aria-selected', 'false');
+        navView.style.display = 'none';
+        graphView.style.display = 'none';
+        journeyView.style.display = 'flex';
       });
     }
 
@@ -3972,6 +4070,13 @@
       selectNode(id, true);
     }
 
+    window.inspectJourneyFile = function(filePath) {
+      const node = GRAPH_DATA?.nodes?.find(item => item.file === filePath);
+      if (!node) return false;
+      switchToNavViewAndSelect(node.id);
+      return true;
+    };
+
     function switchToGraphViewAndSelect(classIdOrName) {
       document.getElementById('view-tab-graph').click();
       setTimeout(() => {
@@ -4162,7 +4267,9 @@
     }
 
     // Start
+    initViewTabs();
     loadData();
   </script>
+  <script src="journey-blueprint.js"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 # Code Review: AST, Intent Routing & Multi-Hop Blast Radius Navigator
 
-A project-agnostic static code analysis platform, architectural visualizer, and agent skill designed for any JavaScript, TypeScript, and Svelte codebase.
+A project-agnostic static code analysis platform, architectural visualizer, and agent skill for JavaScript, TypeScript, Angular, Svelte, Java, and .NET/C# codebases.
 
 `codereview` replaces blind string grepping with Tree-Sitter AST symbol resolution, multi-hop call graph reachability, Chidamber & Kemerer OO metrics, architectural layer validation, and semantic concept routing.
 
@@ -8,14 +8,53 @@ A project-agnostic static code analysis platform, architectural visualizer, and 
 
 ## Features
 
-- **🌐 Project-Agnostic Tree-Sitter AST Analysis**: Parses JavaScript (`.js`, `.mjs`, `.cjs`, `.jsx`), TypeScript (`.ts`, `.mts`, `.cts`, `.tsx`), and Svelte (`.svelte`) to extract functions, classes, methods, constructors, and enums/constants.
+- **🌐 Project-Agnostic AST Analysis**: Parses JavaScript and Svelte with Tree-Sitter, TypeScript with the TypeScript compiler API, and C# with Tree-Sitter to extract classes, methods, functions, enums, calls, and instantiations.
+- **🅰️ Angular Template Analysis**: Connects component methods to event handlers, property bindings, structural bindings, interpolations, and inline templates.
+- **☕ Java AST Analysis**: Parses `.java` sources in one JDK compiler-tree pass and feeds classes, methods, calls, constructors, and basic lock usage into the same graph.
 - **⚡ Disambiguated Call Graph & Multi-Hop Reachability**: Builds forward and reverse call graphs with caller disambiguation and multi-hop reachability tracing (up to 3 hops) to calculate total affected files and blast radiuses.
 - **📊 Objective Complexity & Risk Hotspots**: Computes cyclomatic complexity, cognitive complexity, and Chidamber & Kemerer OO metrics (CBO, WMC, DIT, NOC) to classify symbols into risk tiers (`CRITICAL HOTSPOT`, `HIGH`, `MEDIUM`, `LOW`, `ISOLATED`).
 - **🏛️ Architectural Layer Enforcement**: Detects circular dependencies and layer inversions (e.g., lower infrastructure layers illegally invoking higher presentation components).
 - **🧠 Human Concept Intent Routing**: Bridges natural language developer queries (e.g. `"session token expiration"`, `"checkout invoice calculation"`) to exact code subsystems and governing symbols using stemmed token matching.
+- **Journey Explorer**: Walk through documented user outcomes, screen states and architecture, then group changes by journey step and component.
 - **🔀 Git Diff & VCS Intersect**: Pinpoints modified symbols directly from `git diff`, showing the blast radius and impacted callers of uncommitted changes.
 - **🤖 Agent Conversation & Compliance Auditor**: Analyzes agent interaction transcripts for tool effectiveness, rule violations, and missed opportunities.
 - **🖥️ Interactive Visual Workbench**: Explore call graphs, architecture layers, and blast radius maps via the built-in D3.js visualization (`index.html`).
+
+---
+
+## Journey Explorer
+
+Journey manifests describe user goals, ordered steps, expected outcomes, alternatives, architectural components and repository-relative evidence. They are human-authored and should be checked against current code, tests and domain owners. The provisional [CRWA example](examples/crwa-journeys.json) links the user guide to website and API evidence without requiring either project to be modified.
+
+```bash
+# Walk through all journeys, or one by its stable ID.
+codereview journey show examples/crwa-journeys.json
+codereview journey show examples/crwa-journeys.json calculate
+codereview journey show examples/crwa-journeys.json calculate --step 2
+
+# Compare each repository's HEAD with its working tree (including untracked files).
+codereview journey diff examples/crwa-journeys.json \
+  --repo website=/path/to/website --repo api=/path/to/api
+
+# Compare branches; use name=ref for independent repository revisions.
+codereview journey diff examples/crwa-journeys.json \
+  --repo website=/path/to/website --repo api=/path/to/api \
+  --base website=main --target website=feature \
+  --base api=main --target api=feature --reason 'Author-provided rationale'
+```
+
+Use `--json` for structured output and `--base-manifest path/to/previous.json` to compare two versions of the journey descriptions. A common `--base` or `--target` applies to all repositories unless overridden by `name=ref`; the defaults are `HEAD` and `WORKTREE`. A target revision other than `WORKTREE` excludes uncommitted changes. Paths in evidence are relative to each repository root.
+
+Open `index.html` in a browser and select **Journey Blueprint**, then use **Load journey** to open a manifest such as `examples/crwa-journeys.json`. To review changes in the same view, generate a comparison locally and load the resulting JSON with **Load comparison**:
+
+```bash
+codereview journey diff examples/crwa-journeys.json \
+  --repo website=/path/to/website --repo api=/path/to/api --json > journey-comparison.json
+```
+
+The browser reads these files locally; it does not run Git. An evidence item can be found in the currently loaded symbol graph when that graph contains the same relative file path. Check that the loaded graph represents the intended repository and revision.
+
+The report groups changed evidence by journey and component, and extracts observed Angular HTML controls and conditions, TypeScript navigation, imports, conditions and literal state updates, and C# endpoint attributes. An implementation change does **not** prove a user-visible change: its effect is reported as unknown unless supported by other evidence. Changes without a mapping and repositories not compared remain visible; rationale is unknown unless supplied. Extraction is partial, does not execute the application or infer an author's intent, and does not automatically discover complete journeys.
 
 ---
 
@@ -24,6 +63,8 @@ A project-agnostic static code analysis platform, architectural visualizer, and 
 ### Prerequisites
 - Node.js 18+ (tested on Node 20 / 22)
 - npm
+- A Java 11+ JDK is required only when analyzing Java sources.
+- No .NET SDK is required to analyze C# sources.
 
 ### Local Installation
 ```bash

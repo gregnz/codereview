@@ -27,6 +27,7 @@ const { getLayerForFile, loadProjectConfig, findProjectRoot } = require('./src/c
 
 // Parser & AST Helpers
 const { parseFileAST, collectFiles } = require('./src/parser/javascript');
+const { parseProjectFiles } = require('./src/parser/project-parser');
 const { getParamCount, getReturnCount } = require('./src/parser/ast-helpers');
 
 // Complexity & Metrics
@@ -85,13 +86,7 @@ function main() {
   loadProjectConfig(rootDir);
 
   const files = collectFiles(resolvedTarget);
-  const allFileResults = [];
-
-  for (const file of files) {
-    const code = fs.readFileSync(file, 'utf8');
-    const res = parseFileAST(file, code);
-    allFileResults.push({ filePath: file, ...res });
-  }
+  const allFileResults = parseProjectFiles(files, rootDir);
 
   // Build the multi-hop blast radius & graph index
   const blastIndex = buildBlastRadiusIndex(allFileResults, rootDir);
